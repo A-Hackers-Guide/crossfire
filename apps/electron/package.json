@@ -19,11 +19,51 @@
   "build": {
     "appId": "io.github.crossfire.electron",
     "productName": "Crossfire",
-    "files": ["main.cjs", "preload.cjs", { "from": "../../ui/dist", "to": "ui" }],
-    "extraResources": [{ "from": "../../engine/target/release", "to": "bin", "filter": ["crossfire-engine", "crossfire-engine.exe"] }],
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      {
+        "from": "../../ui/dist",
+        "to": "ui"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "../../engine/target/release",
+        "to": "bin",
+        "filter": [
+          "crossfire-engine",
+          "crossfire-engine.exe"
+        ]
+      }
+    ],
     "icon": "../../assets/icon.png",
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.developer-tools" },
-    "win": { "target": ["nsis", "portable"] },
-    "linux": { "target": ["AppImage", "deb", "rpm"], "category": "Development" }
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "category": "Development",
+      "maintainer": "A-Hackers-Guide <289517818+A-Hackers-Guide@users.noreply.github.com>"
+    }
+  },
+  "homepage": "https://github.com/A-Hackers-Guide/crossfire",
+  "author": {
+    "name": "A-Hackers-Guide",
+    "email": "289517818+A-Hackers-Guide@users.noreply.github.com"
   }
 }

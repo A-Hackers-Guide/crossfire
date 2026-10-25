@@ -83,6 +83,9 @@ jobs:
           prepare: pkg install -y rust node22 npm-node22 webkit2-gtk_41 gtk3 libsoup3 pkgconf
           run: |
             set -e
+            # FreeBSD's base-system bzip2 ships no pkg-config file, which gdk-sys needs
+            mkdir -p /usr/local/libdata/pkgconfig
+            printf 'prefix=/usr\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\nName: bzip2\nDescription: bzip2 (base system)\nVersion: 1.0.8\nLibs: -L${libdir} -lbz2\nCflags: -I${includedir}\n' > /usr/local/libdata/pkgconfig/bzip2.pc
             cargo build --release --manifest-path engine/Cargo.toml
             npm ci --prefix ui && npm run build --prefix ui
             # Tauri has no FreeBSD bundler, so ship the raw binary plus the engine CLI.
@@ -110,8 +113,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: engine }
       - run: npm ci --prefix ui
-      - run: npm install --prefix apps/electron
-      - run: npm run dist --prefix apps/electron
+      - run: npm install
+        working-directory: apps/electron
+      - run: npm run dist
+        working-directory: apps/electron
         env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
       - uses: actions/upload-artifact@v4
         with:
