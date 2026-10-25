@@ -1,0 +1,283 @@
+# Win32 API usage in C/C++ (and Objective-C++ that wraps it).
+# Each group shares lang/os/cat/sev/fix; rules may override any of them.
+
+# --- headers --------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "other"
+sev = "medium"
+fix = "Wrap in #ifdef _WIN32 and include crossfire/cf_platform.h, which provides the portable subset (auto-rewritten)."
+rules = [
+  { id = "win32.windows-h", api = "windows.h", re = '#\s*include\s*[<"](?i:windows\.h)[>"]', msg = "Includes <windows.h>, the umbrella Win32 header." },
+  { id = "win32.windowsx-h", api = "windowsx.h", re = '#\s*include\s*[<"](?i:windowsx\.h)[>"]', msg = "Includes <windowsx.h> (Win32 message cracker macros).", cat = "windowing" },
+  { id = "win32.tchar-h", api = "tchar.h", re = '#\s*include\s*[<"](?i:tchar\.h)[>"]', msg = "TCHAR / _T() generic-text mappings are Windows-only.", fix = "Use char + UTF-8 everywhere; cf_platform.h maps _T()/TCHAR to char off Windows." },
+  { id = "win32.conio-h", api = "conio.h", re = '#\s*include\s*[<"](?i:conio\.h)[>"]', msg = "<conio.h> (_getch/_kbhit) is MSVC/DOS-only.", cat = "input", fix = "Use termios raw mode (POSIX) or cf_getch()/cf_kbhit() from cf_platform.h." },
+  { id = "win32.io-h", api = "io.h", re = '#\s*include\s*[<"](?i:io\.h)[>"]', msg = "<io.h> low-level I/O (_open/_access) is Windows-specific.", cat = "filesystem", fix = "Use <unistd.h>/<fcntl.h> on POSIX or std::filesystem." },
+  { id = "win32.direct-h", api = "direct.h", re = '#\s*include\s*[<"](?i:direct\.h)[>"]', msg = "<direct.h> (_mkdir/_getcwd) is Windows-specific.", cat = "filesystem", fix = "Use std::filesystem::create_directories / current_path, or mkdir/getcwd on POSIX." },
+  { id = "win32.process-h", api = "process.h", re = '#\s*include\s*[<"](?i:process\.h)[>"]', msg = "<process.h> (_beginthreadex/_spawn) is Windows-specific.", cat = "process", fix = "Use std::thread or pthreads; posix_spawn for processes." },
+  { id = "win32.shlobj-h", api = "shlobj.h", re = '#\s*include\s*[<"](?i:shlobj(_core)?\.h|shellapi\.h|shlwapi\.h)[>"]', msg = "Shell API headers (SHGetFolderPath, ShellExecute, PathCombine).", cat = "filesystem", fix = "Use SDL_GetPrefPath / cf_user_data_dir() and std::filesystem::path." },
+  { id = "win32.mmsystem-h", api = "mmsystem.h", re = '#\s*include\s*[<"](?i:mmsystem\.h|timeapi\.h)[>"]', msg = "Windows Multimedia (winmm) header.", cat = "audio", fix = "Use miniaudio or SDL3 audio; std::chrono for timers." },
+  { id = "win32.winsock-h", api = "winsock2.h", re = '#\s*include\s*[<"](?i:winsock2?\.h|ws2tcpip\.h|mswsock\.h)[>"]', msg = "WinSock headers.", cat = "networking", fix = "Include <sys/socket.h>, <netinet/in.h>, <arpa/inet.h>, <unistd.h> on POSIX; cf_platform.h maps closesocket/SOCKET." },
+  { id = "win32.objbase-h", api = "objbase.h", re = '#\s*include\s*[<"](?i:objbase\.h|combaseapi\.h|unknwn\.h|comdef\.h|atlbase\.h|wrl(/client)?\.h)[>"]', msg = "COM / ATL / WRL headers.", sev = "high", fix = "Remove COM: replace each COM component with a portable library (see per-API findings)." },
+  { id = "win32.intrin-h", api = "intrin.h", re = '#\s*include\s*[<"](?i:intrin\.h)[>"]', msg = "<intrin.h> is MSVC-only.", sev = "low", fix = "Use <x86intrin.h>/<immintrin.h> on GCC/Clang or compiler builtins (__builtin_*); on ARM use <arm_neon.h>." },
+  { id = "win32.versionhelpers-h", api = "VersionHelpers.h", re = '#\s*include\s*[<"](?i:versionhelpers\.h)[>"]', msg = "Windows version helper header.", sev = "low", fix = "Use uname() / SDL_GetPlatform() for OS info." },
+  { id = "win32.dbghelp-h", api = "dbghelp.h", re = '#\s*include\s*[<"](?i:dbghelp\.h|minidumpapiset\.h)[>"]', msg = "DbgHelp (stack walking / minidumps).", cat = "process", fix = "Use backtrace() (execinfo.h) / libunwind, or crashpad / sentry-native for crash dumps." },
+  { id = "win32.commctrl-h", api = "commctrl.h", re = '#\s*include\s*[<"](?i:commctrl\.h|commdlg\.h|richedit\.h|uxtheme\.h|dwmapi\.h)[>"]', msg = "Common Controls / dialogs / DWM headers.", cat = "ui", sev = "high", fix = "Replace native widgets with Dear ImGui, Qt 6, or wxWidgets; use SDL3 SDL_ShowOpenFileDialog for file dialogs." },
+  { id = "win32.wininet-h", api = "wininet.h", re = '#\s*include\s*[<"](?i:wininet\.h|winhttp\.h|urlmon\.h)[>"]', msg = "WinINet / WinHTTP.", cat = "networking", sev = "high", fix = "Use libcurl (or cpr) which works on all four OSes." },
+]
+
+# --- windowing / message loop --------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "windowing"
+sev = "blocker"
+fix = "Create the window with SDL3 (SDL_CreateWindow) or GLFW and handle events with SDL_PollEvent / glfwPollEvents."
+rules = [
+  { id = "win32.createwindow", api = "CreateWindowEx", re = '\bCreateWindow(Ex)?[AW]?\s*\(', msg = "Creates a native Win32 window (HWND)." },
+  { id = "win32.registerclass", api = "RegisterClassEx", re = '\bRegisterClass(Ex)?[AW]?\s*\(', msg = "Registers a Win32 window class." },
+  { id = "win32.wndproc", api = "WndProc", re = '\bLRESULT\s+(CALLBACK|WINAPI)\s+\w+\s*\(', msg = "Win32 window procedure (message callback).", fix = "Translate WM_* messages into SDL_Event handling (SDL_EVENT_KEY_DOWN, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_WINDOW_RESIZED...)." },
+  { id = "win32.defwindowproc", api = "DefWindowProc", re = '\bDefWindowProc[AW]?\s*\(', msg = "Default Win32 message handling.", sev = "high" },
+  { id = "win32.message-loop", api = "GetMessage/PeekMessage", re = '\b(GetMessage|PeekMessage)[AW]?\s*\(', msg = "Win32 message pump.", fix = "Replace with `while (SDL_PollEvent(&e)) { ... }` (SDL3) or glfwPollEvents()." },
+  { id = "win32.dispatch", api = "DispatchMessage", re = '\b(DispatchMessage|TranslateMessage)[AW]?\s*\(', msg = "Win32 message dispatch.", sev = "high" },
+  { id = "win32.winmain", api = "WinMain", re = '\b(WinMain|wWinMain|_tWinMain)\s*\(', msg = "WinMain entry point.", sev = "high", fix = "Use a standard int main(int argc, char** argv); SDL3's SDL_main.h maps it to WinMain on Windows automatically." },
+  { id = "win32.hwnd", api = "HWND", re = '\b(HWND|HINSTANCE|HDC|HICON|HCURSOR|HMENU|HBRUSH)\b', msg = "Win32 handle types in signatures/state.", sev = "medium", once = true, fix = "Replace with SDL_Window* / opaque handles; keep native handles behind an #ifdef _WIN32 backend." },
+  { id = "win32.showwindow", api = "ShowWindow", re = '\b(ShowWindow|UpdateWindow|SetWindowPos|MoveWindow|SetWindowText[AW]?)\s*\(', msg = "Win32 window state manipulation.", sev = "high", fix = "Use SDL_ShowWindow / SDL_SetWindowPosition / SDL_SetWindowTitle." },
+  { id = "win32.adjustwindowrect", api = "AdjustWindowRect", re = '\b(AdjustWindowRect(Ex)?|GetClientRect|GetWindowRect|ClientToScreen|ScreenToClient)\s*\(', msg = "Win32 window geometry.", sev = "medium", fix = "Use SDL_GetWindowSize / SDL_GetWindowSizeInPixels (handles HiDPI)." },
+  { id = "win32.wm-messages", api = "WM_*", re = '\bWM_(KEYDOWN|KEYUP|CHAR|MOUSEMOVE|LBUTTONDOWN|RBUTTONDOWN|SIZE|CLOSE|DESTROY|PAINT|QUIT|SYSKEYDOWN|INPUT|ACTIVATE|SETFOCUS|KILLFOCUS|MOUSEWHEEL)\b', msg = "Handles Win32 window messages.", sev = "high", once = true, fix = "Map to SDL3 events: SDL_EVENT_KEY_DOWN/UP, SDL_EVENT_TEXT_INPUT, SDL_EVENT_MOUSE_*, SDL_EVENT_WINDOW_*, SDL_EVENT_QUIT." },
+  { id = "win32.postquit", api = "PostQuitMessage", re = '\bPostQuitMessage\s*\(', msg = "Ends the Win32 message loop.", sev = "medium", fix = "Set a running=false flag / push SDL_EVENT_QUIT." },
+  { id = "win32.gdi", api = "GDI", re = '\b(BeginPaint|EndPaint|GetDC|ReleaseDC|BitBlt|StretchBlt|CreateCompatibleDC|SelectObject|DeleteObject|TextOut[AW]?|FillRect|CreateDIBSection|SetPixel)\s*\(', msg = "GDI drawing calls.", cat = "graphics", fix = "Draw with SDL_Renderer (SDL_RenderTexture) or a GPU API; for text use SDL_ttf or stb_truetype." },
+  { id = "win32.cursor", api = "SetCursor", re = '\b(SetCursor|LoadCursor[AW]?|ShowCursor|ClipCursor|SetCursorPos|GetCursorPos)\s*\(', msg = "Win32 cursor control.", cat = "input", sev = "medium", fix = "Use SDL_SetCursor / SDL_HideCursor / SDL_SetWindowRelativeMouseMode / SDL_WarpMouseInWindow." },
+  { id = "win32.loadicon", api = "LoadIcon", re = '\b(LoadIcon|LoadImage|LoadBitmap)[AW]?\s*\(', msg = "Loads Win32 resources (.rc icons/bitmaps).", sev = "medium", cat = "packaging", fix = "Load images from files (stb_image) and set the icon with SDL_SetWindowIcon; package icons per OS (.icns/.ico/.png)." },
+  { id = "win32.timer-msg", api = "SetTimer", re = '\b(SetTimer|KillTimer)\s*\(', msg = "Win32 window timers.", cat = "timing", sev = "medium", fix = "Use SDL_AddTimer or measure delta time in the main loop with std::chrono::steady_clock." },
+  { id = "win32.clipboard", api = "Clipboard", re = '\b(OpenClipboard|GetClipboardData|SetClipboardData|EmptyClipboard)\s*\(', msg = "Win32 clipboard.", cat = "ui", sev = "medium", fix = "Use SDL_GetClipboardText / SDL_SetClipboardText." },
+  { id = "win32.dragdrop", api = "DragAcceptFiles", re = '\b(DragAcceptFiles|DragQueryFile[AW]?)\s*\(', msg = "Win32 drag & drop of files.", cat = "ui", sev = "medium", fix = "Handle SDL_EVENT_DROP_FILE." },
+]
+
+# --- UI dialogs ------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "ui"
+sev = "medium"
+fix = "Use SDL_ShowSimpleMessageBox / SDL_ShowOpenFileDialog (SDL3), tinyfiledialogs, or Qt."
+rules = [
+  { id = "win32.messagebox", api = "MessageBox", re = '\bMessageBox(Ex)?[AW]?\s*\(', msg = "Native Win32 message box.", fix = "cf_platform.h provides MessageBoxA off Windows (stderr / SDL_ShowSimpleMessageBox when SDL3 is enabled); idiomatic: SDL_ShowSimpleMessageBox." },
+  { id = "win32.getopenfilename", api = "GetOpenFileName", re = '\b(GetOpenFileName|GetSaveFileName|SHBrowseForFolder)[AW]?\s*\(', msg = "Win32 common file dialogs.", sev = "high" },
+  { id = "win32.dialogbox", api = "DialogBox", re = '\b(DialogBox(Param)?|CreateDialog(Param)?|EndDialog|GetDlgItem(Text)?|SetDlgItemText)[AW]?\s*\(', msg = "Win32 dialog resources.", sev = "blocker", fix = "Rebuild dialogs in Dear ImGui, Qt 6 (Widgets/QML) or wxWidgets." },
+  { id = "win32.menus", api = "CreateMenu", re = '\b(CreateMenu|CreatePopupMenu|AppendMenu[AW]?|TrackPopupMenu|SetMenu)\s*\(', msg = "Win32 menus.", sev = "high", fix = "Use Qt/wxWidgets menus, Dear ImGui menu bars, or SDL3 tray/menu APIs." },
+  { id = "win32.shell-notify", api = "Shell_NotifyIcon", re = '\bShell_NotifyIcon[AW]?\s*\(', msg = "System tray icon.", sev = "high", fix = "Use SDL3 SDL_CreateTray, Qt QSystemTrayIcon, or libappindicator on Linux." },
+  { id = "win32.shellexecute", api = "ShellExecute", re = '\bShellExecute(Ex)?[AW]?\s*\(', msg = "Opens files/URLs via the Windows shell.", cat = "process", fix = "Use SDL_OpenURL, or cf_open_url(): `open` on macOS, `xdg-open` on Linux/FreeBSD." },
+  { id = "win32.outputdebugstring", api = "OutputDebugString", re = '\bOutputDebugString[AW]?\s*\(', msg = "Debugger output channel.", sev = "low", cat = "other", fix = "cf_platform.h maps it to stderr off Windows; idiomatic: SDL_Log / spdlog / fprintf(stderr)." },
+]
+
+# --- timing ---------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "timing"
+sev = "low"
+fix = "Use std::chrono::steady_clock / std::this_thread::sleep_for, or cf_ticks_ms()/cf_sleep_ms() (auto-rewritten)."
+rules = [
+  { id = "win32.sleep", api = "Sleep", re = '\bSleep\s*\(', msg = "Win32 Sleep(milliseconds); POSIX sleep() takes seconds.", not = '\bSDL_|::Sleep|\.Sleep', linux = "Rewritten to cf_sleep_ms() (nanosleep under the hood).", macos = "Rewritten to cf_sleep_ms() (nanosleep under the hood).", freebsd = "Rewritten to cf_sleep_ms() (nanosleep under the hood)." },
+  { id = "win32.sleepex", api = "SleepEx", re = '\bSleepEx\s*\(', msg = "Alertable sleep (APC delivery) has no POSIX equivalent.", sev = "medium" },
+  { id = "win32.gettickcount", api = "GetTickCount", re = '\bGetTickCount(64)?\s*\(', msg = "Millisecond uptime counter." },
+  { id = "win32.qpc", api = "QueryPerformanceCounter", re = '\bQueryPerformance(Counter|Frequency)\s*\(', msg = "High-resolution timer.", fix = "Use std::chrono::steady_clock or clock_gettime(CLOCK_MONOTONIC); cf_platform.h provides a QPC compatibility shim." },
+  { id = "win32.timegettime", api = "timeGetTime", re = '\btime(GetTime|BeginPeriod|EndPeriod)\s*\(', msg = "winmm timer APIs.", fix = "Use std::chrono::steady_clock; timer resolution tweaks are unnecessary elsewhere." },
+  { id = "win32.getsystemtime", api = "GetSystemTime", re = '\bGet(System|Local)Time(AsFileTime)?\s*\(', msg = "Win32 wall-clock time (SYSTEMTIME/FILETIME).", fix = "Use std::chrono::system_clock or time()/localtime_r()." },
+  { id = "win32.waitable-timer", api = "CreateWaitableTimer", re = '\bCreateWaitableTimer(Ex)?[AW]?\s*\(', msg = "Waitable timer objects.", sev = "medium", fix = "Use timerfd (Linux), kqueue EVFILT_TIMER (macOS/FreeBSD), or a std::thread + condition_variable." },
+  { id = "win32.rdtsc", api = "__rdtsc", re = '\b__rdtsc\s*\(', msg = "MSVC TSC intrinsic.", fix = "Use __builtin_readcyclecounter (Clang) / __rdtsc from <x86intrin.h>; prefer std::chrono on ARM (Apple Silicon)." },
+]
+
+# --- threading & sync -------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "threading"
+sev = "medium"
+fix = "Use std::thread / std::mutex / std::condition_variable / std::atomic (C++11) or C11 threads/pthreads."
+rules = [
+  { id = "win32.createthread", api = "CreateThread", re = '\b(CreateThread|_beginthread(ex)?)\s*\(', msg = "Win32 thread creation.", sev = "high" },
+  { id = "win32.critical-section", api = "CRITICAL_SECTION", re = '\b(CRITICAL_SECTION|(Initialize|Enter|Leave|Delete|TryEnter)CriticalSection(AndSpinCount)?)\b', msg = "Win32 critical sections.", fix = "Use std::mutex; cf_platform.h provides a pthread-based CRITICAL_SECTION shim in strict mode." },
+  { id = "win32.srwlock", api = "SRWLOCK", re = '\b(SRWLOCK|AcquireSRWLock(Exclusive|Shared)|ReleaseSRWLock(Exclusive|Shared)|InitializeSRWLock)\b', msg = "Slim reader/writer locks.", fix = "Use std::shared_mutex or pthread_rwlock_t." },
+  { id = "win32.events", api = "CreateEvent", re = '\b(CreateEvent(Ex)?[AW]?|SetEvent|ResetEvent)\s*\(', msg = "Win32 event objects.", sev = "high", fix = "Use std::condition_variable + flag, eventfd (Linux) or kqueue EVFILT_USER (macOS/FreeBSD)." },
+  { id = "win32.waitforsingle", api = "WaitForSingleObject", re = '\bWaitFor(Single|Multiple)Object(s)?(Ex)?\s*\(', msg = "Waits on Win32 kernel objects.", sev = "high", fix = "Use std::thread::join, std::condition_variable::wait_for, or poll/kqueue on fds." },
+  { id = "win32.mutex", api = "CreateMutex", re = '\bCreate(Mutex|Semaphore)(Ex)?[AW]?\s*\(', msg = "Named/unnamed Win32 mutex or semaphore.", fix = "Use std::mutex / std::counting_semaphore (C++20); for named cross-process locks use flock() or POSIX sem_open." },
+  { id = "win32.interlocked", api = "Interlocked*", re = '\bInterlocked(Increment|Decrement|Exchange|CompareExchange|Add|Or|And)(64|Pointer)?\s*\(', msg = "Win32 atomic intrinsics.", sev = "low", fix = "Use std::atomic or C11 <stdatomic.h>; cf_platform.h maps Interlocked* to __atomic builtins." },
+  { id = "win32.tls", api = "TlsAlloc", re = '\b(TlsAlloc|TlsGetValue|TlsSetValue|TlsFree|FlsAlloc)\s*\(', msg = "Win32 thread-local storage slots.", fix = "Use thread_local (C++11) / _Thread_local (C11)." },
+  { id = "win32.threadpool", api = "QueueUserWorkItem", re = '\b(QueueUserWorkItem|CreateThreadpoolWork|SubmitThreadpoolWork|CreateTimerQueueTimer)\s*\(', msg = "Win32 thread pool.", sev = "high", fix = "Use a portable pool (BS::thread_pool, Taskflow, oneTBB) or std::async." },
+  { id = "win32.threadid", api = "GetCurrentThreadId", re = '\bGetCurrent(Thread|Process)(Id)?\s*\(', msg = "Win32 thread/process identity.", sev = "low", fix = "Use std::this_thread::get_id(), getpid(), or pthread_self()." },
+  { id = "win32.setthreadpriority", api = "SetThreadPriority", re = '\b(SetThreadPriority|SetPriorityClass|SetThreadAffinityMask|SetThreadDescription)\s*\(', msg = "Win32 thread scheduling controls.", sev = "low", fix = "Use pthread_setschedparam / pthread_setname_np (signature differs per OS: Linux/FreeBSD take the thread, macOS only names self); SDL_SetCurrentThreadPriority." },
+]
+
+# --- filesystem ------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "filesystem"
+sev = "medium"
+fix = "Use std::filesystem (C++17), fopen/stdio, or POSIX open/read/write."
+rules = [
+  { id = "win32.createfile", api = "CreateFile", re = '\bCreateFile[AW2]?\s*\(', msg = "Win32 file handles (HANDLE).", sev = "high", fix = "Use std::fstream / fopen, or open(2) with O_* flags; map FILE_SHARE_* semantics manually." },
+  { id = "win32.readfile", api = "ReadFile/WriteFile", re = '\b(ReadFile|WriteFile)(Ex)?\s*\(', msg = "Win32 handle I/O.", sev = "high", fix = "Use fread/fwrite, std::fstream, or read(2)/write(2)." },
+  { id = "win32.findfirstfile", api = "FindFirstFile", re = '\bFind(First|Next)File(Ex)?[AW]?\s*\(', msg = "Win32 directory enumeration.", fix = "Use std::filesystem::directory_iterator or opendir/readdir." },
+  { id = "win32.getmodulefilename", api = "GetModuleFileName", re = '\bGetModuleFileName(Ex)?[AW]?\s*\(', msg = "Executable path lookup.", fix = "Use cf_executable_path(): /proc/self/exe (Linux), _NSGetExecutablePath (macOS), sysctl KERN_PROC_PATHNAME (FreeBSD); or SDL_GetBasePath." },
+  { id = "win32.shgetfolderpath", api = "SHGetFolderPath", re = '\bSHGet(Special)?(Known)?Folder(Path|Location)[AW]?\s*\(', msg = "Known-folder lookup (AppData, Documents).", fix = "Use SDL_GetPrefPath or cf_user_data_dir(): ~/Library/Application Support (macOS), $XDG_DATA_HOME or ~/.local/share (Linux/FreeBSD)." },
+  { id = "win32.getenv-appdata", api = "%APPDATA%", re = '(getenv|_wgetenv|_dupenv_s|GetEnvironmentVariable[AW]?)\s*\(\s*(L)?"(APPDATA|LOCALAPPDATA|USERPROFILE|PROGRAMDATA|PROGRAMFILES|TEMP|TMP|HOMEPATH|HOMEDRIVE)"', msg = "Reads Windows-only environment variables for paths.", fix = "Rewritten to cf_user_data_dir() / cf_home_dir() / cf_temp_dir() (XDG on Linux/FreeBSD, ~/Library on macOS)." },
+  { id = "win32.envvar-literal", api = "%APPDATA%", re = '%(APPDATA|LOCALAPPDATA|USERPROFILE|PROGRAMDATA|PROGRAMFILES|TEMP|WINDIR|SYSTEMROOT)%', msg = "Windows %VAR% path expansion in a literal.", lang = ["cfam", "dotnet", "python", "js", "go", "rust", "java"], fix = "Resolve the directory at runtime with the platform helper (cf_user_data_dir / Environment.GetFolderPath / platformdirs / dirs crate)." },
+  { id = "win32.drive-path", api = "C:\\ path", re = '"[A-Za-z]:(\\\\|/)', msg = "Hard-coded absolute Windows drive path.", sev = "high", lang = ["cfam", "dotnet", "python", "js", "go", "rust", "java", "kotlin", "swift", "lua"], fix = "Make the path relative to the executable or a user data directory; never assume a drive letter." },
+  { id = "win32.backslash-path", api = "backslash path", re = '"[A-Za-z0-9_.\-]+(\\\\[A-Za-z0-9_.\-]+)+"', msg = "Backslash-separated path literal.", sev = "low", lang = ["cfam", "dotnet", "python", "js", "go", "rust", "java", "kotlin", "lua"], fix = "Forward slashes work on every OS including Windows (auto-rewritten); or build paths with std::filesystem::path / os.path.join." },
+  { id = "win32.max-path", api = "MAX_PATH", re = '\bMAX_PATH\b', msg = "MAX_PATH (260) buffer sizing.", sev = "low", fix = "Use std::string / std::filesystem::path; PATH_MAX on POSIX (cf_platform.h defines MAX_PATH)." },
+  { id = "win32.crt-fileio", api = "_open/_access", re = '\b_(open|close|read|write|access|stat|stat64|fstat|lseek|unlink|mkdir|rmdir|getcwd|chdir|fileno|wfopen|wopen|findfirst|findnext)\s*\(', msg = "Underscore-prefixed MSVC CRT file functions.", sev = "low", fix = "Use the POSIX names (open, access, stat, mkdir...) or std::filesystem; cf_platform.h maps the common ones." },
+  { id = "win32.fopen-s", api = "fopen_s", re = '\b(fopen_s|_wfopen_s|freopen_s)\s*\(', msg = "MSVC secure CRT fopen_s.", sev = "low", fix = "cf_platform.h provides fopen_s off Windows; idiomatic: plain fopen." },
+  { id = "win32.file-attributes", api = "GetFileAttributes", re = '\b(GetFileAttributes(Ex)?|SetFileAttributes|GetFileSize(Ex)?|SetFilePointer(Ex)?|GetFileTime|SetFileTime)[AW]?\s*\(', msg = "Win32 file metadata.", fix = "Use std::filesystem::status / file_size / last_write_time, or stat(2)." },
+  { id = "win32.file-ops", api = "CopyFile/MoveFile", re = '\b(CopyFile(Ex)?|MoveFile(Ex)?|DeleteFile|CreateDirectory(Ex)?|RemoveDirectory|GetTempPath|GetTempFileName|GetCurrentDirectory|SetCurrentDirectory|GetFullPathName)[AW]?\s*\(', msg = "Win32 file operations.", fix = "Use std::filesystem::copy/rename/remove/create_directories/temp_directory_path/absolute." },
+  { id = "win32.change-notify", api = "ReadDirectoryChangesW", re = '\b(ReadDirectoryChangesW|FindFirstChangeNotification[AW]?)\s*\(', msg = "Directory change notifications.", sev = "high", fix = "Use efsw / dmon / watchman, or inotify (Linux), FSEvents (macOS), kqueue EVFILT_VNODE (FreeBSD)." },
+  { id = "win32.mapviewoffile", api = "MapViewOfFile", re = '\b(CreateFileMapping[AW]?|MapViewOfFile(Ex)?|UnmapViewOfFile)\s*\(', msg = "Memory-mapped files.", sev = "high", fix = "Use mmap/munmap (POSIX) or a wrapper like mio / boost::interprocess." },
+  { id = "win32.virtualalloc", api = "VirtualAlloc", re = '\bVirtual(Alloc|Free|Protect|Query)(Ex)?\s*\(', msg = "Win32 virtual memory.", sev = "high", cat = "process", fix = "Use mmap/munmap/mprotect; on Apple Silicon JIT pages need MAP_JIT + pthread_jit_write_protect_np." },
+  { id = "win32.heapalloc", api = "HeapAlloc", re = '\b(HeapAlloc|HeapFree|HeapReAlloc|GetProcessHeap|LocalAlloc|LocalFree|GlobalAlloc|GlobalFree)\s*\(', msg = "Win32 heap functions.", sev = "low", cat = "process", fix = "Use malloc/free or new/delete." },
+]
+
+# --- registry ---------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "registry"
+sev = "high"
+fix = "Store settings in a config file under the user data dir (JSON/TOML/INI via cf_user_data_dir()); on macOS NSUserDefaults/CFPreferences is the native equivalent."
+rules = [
+  { id = "win32.regopenkey", api = "RegOpenKeyEx", re = '\bReg(OpenKey|CreateKey)(Ex)?[AW]?\s*\(', msg = "Opens/creates registry keys." },
+  { id = "win32.regqueryvalue", api = "RegQueryValueEx", re = '\bReg(QueryValue|GetValue|SetValue|SetKeyValue|DeleteValue|DeleteKey|EnumKey|EnumValue)(Ex)?[AW]?\s*\(', msg = "Reads/writes registry values." },
+  { id = "win32.hkey", api = "HKEY", re = '\b(HKEY_CURRENT_USER|HKEY_LOCAL_MACHINE|HKEY_CLASSES_ROOT|HKCU|HKLM)\b', msg = "References a registry hive.", sev = "medium", once = true },
+  { id = "win32.regclosekey", api = "RegCloseKey", re = '\bRegCloseKey\s*\(', msg = "Closes a registry key.", sev = "low" },
+]
+
+# --- dynamic libraries -------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "dynamicLibrary"
+sev = "medium"
+fix = "Use cf_dlopen()/cf_dlsym() (dlopen/dlsym on POSIX) or SDL_LoadObject/SDL_LoadFunction; library names differ: .dll / .dylib / .so."
+rules = [
+  { id = "win32.loadlibrary", api = "LoadLibrary", re = '\bLoadLibrary(Ex)?[AW]?\s*\(', msg = "Loads a DLL at runtime." },
+  { id = "win32.getprocaddress", api = "GetProcAddress", re = '\bGetProcAddress\s*\(', msg = "Resolves a DLL symbol." },
+  { id = "win32.freelibrary", api = "FreeLibrary", re = '\bFreeLibrary\s*\(', msg = "Unloads a DLL.", sev = "low" },
+  { id = "win32.dll-literal", api = ".dll name", re = '"[A-Za-z0-9_\-]+\.dll"', msg = "Hard-coded .dll file name.", lang = ["cfam", "rust", "go", "python", "js", "java"], fix = "Build the name per OS (lib<name>.so / lib<name>.dylib / <name>.dll) or use CF_SHARED_LIB_NAME(\"name\")." },
+  { id = "win32.dllmain", api = "DllMain", re = '\bBOOL\s+(WINAPI|APIENTRY)\s+DllMain\s*\(', msg = "DLL entry point.", sev = "high", fix = "Use __attribute__((constructor/destructor)) on GCC/Clang, or explicit init/shutdown functions." },
+  { id = "win32.getmodulehandle", api = "GetModuleHandle", re = '\bGetModuleHandle(Ex)?[AW]?\s*\(', msg = "Module handle lookup.", fix = "Use dladdr / dlopen(NULL) on POSIX." },
+]
+
+# --- process -------------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "process"
+sev = "high"
+fix = "Use posix_spawn / fork+exec (POSIX), reproc or boost::process for a portable API, or SDL3 SDL_CreateProcess."
+rules = [
+  { id = "win32.createprocess", api = "CreateProcess", re = '\bCreateProcess(AsUser)?[AW]?\s*\(', msg = "Spawns a process with Win32 semantics." },
+  { id = "win32.winexec", api = "WinExec", re = '\bWinExec\s*\(', msg = "Legacy process launch." },
+  { id = "win32.terminateprocess", api = "TerminateProcess", re = '\b(TerminateProcess|OpenProcess|GetExitCodeProcess|ExitProcess)\s*\(', msg = "Win32 process control.", sev = "medium", fix = "Use kill(2), waitpid(2), exit()." },
+  { id = "win32.pipes", api = "CreatePipe", re = '\b(CreatePipe|CreateNamedPipe[AW]?|ConnectNamedPipe)\s*\(', msg = "Win32 pipes / named pipes.", fix = "Use pipe(2), mkfifo, or Unix domain sockets (AF_UNIX works on Windows 10+ too)." },
+  { id = "win32.getlasterror", api = "GetLastError", re = '\b(GetLastError|SetLastError|FormatMessage[AW]?)\s*\(', msg = "Win32 error reporting.", sev = "low", fix = "Use errno + strerror() on POSIX; wrap in a cf_last_error_string() helper." },
+  { id = "win32.console", api = "AllocConsole", re = '\b(AllocConsole|FreeConsole|AttachConsole|SetConsoleTextAttribute|GetStdHandle|SetConsoleMode|SetConsoleTitle[AW]?)\s*\(', msg = "Win32 console API.", sev = "medium", fix = "Use ANSI escape codes (supported on Windows 10+ too) or a library like fmt/rang; consoles are always attached on POSIX." },
+  { id = "win32.systeminfo", api = "GetSystemInfo", re = '\b(GetSystemInfo|GlobalMemoryStatus(Ex)?|GetVersionEx[AW]?|GetComputerName[AW]?|GetUserName[AW]?)\s*\(', msg = "Win32 system information.", sev = "medium", fix = "Use std::thread::hardware_concurrency, sysconf(_SC_NPROCESSORS_ONLN), sysctl (macOS/FreeBSD), /proc/meminfo (Linux), uname(), getlogin_r()." },
+  { id = "win32.services", api = "Windows service", re = '\b(StartServiceCtrlDispatcher[AW]?|RegisterServiceCtrlHandler(Ex)?[AW]?|OpenSCManager[AW]?|CreateService[AW]?)\s*\(', msg = "Windows service control manager.", sev = "blocker", fix = "Provide a systemd unit (Linux), launchd plist (macOS), rc.d script (FreeBSD) and run as a normal daemon." },
+  { id = "win32.seh", api = "__try/__except", re = '\b__(try|except|finally)\b', msg = "Structured exception handling (SEH) is MSVC-only.", sev = "high", cat = "other", fix = "Use C++ exceptions or signal handlers (sigaction SIGSEGV) for crash handling; crashpad for reports." },
+  { id = "win32.vectored-handler", api = "SetUnhandledExceptionFilter", re = '\b(SetUnhandledExceptionFilter|AddVectoredExceptionHandler|MiniDumpWriteDump)\s*\(', msg = "Crash handling via SEH filters.", fix = "Use sigaction() handlers or crashpad / sentry-native / Breakpad." },
+  { id = "win32.debugbreak", api = "__debugbreak", re = '\b(__debugbreak|DebugBreak|IsDebuggerPresent)\s*\(', msg = "Debugger intrinsics.", sev = "low", cat = "other", fix = "Use __builtin_trap() / raise(SIGTRAP); cf_platform.h maps __debugbreak." },
+]
+
+# --- networking --------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "networking"
+sev = "medium"
+fix = "Use BSD sockets directly (same API) with small shims, or a portable library: asio, libuv, ENet, GameNetworkingSockets."
+rules = [
+  { id = "win32.wsastartup", api = "WSAStartup", re = '\bWSA(Startup|Cleanup)\s*\(', msg = "WinSock initialization.", sev = "low", fix = "Not needed on POSIX; keep under #ifdef _WIN32 (cf_net_init() does this)." },
+  { id = "win32.wsa-api", api = "WSA*", re = '\bWSA(GetLastError|Send|Recv|SendTo|RecvFrom|Socket|EventSelect|WaitForMultipleEvents|Poll|Ioctl|AsyncSelect)[AW]?\s*\(', msg = "WinSock-specific extended API.", sev = "high", fix = "Use send/recv/poll and errno; WSAPoll maps to poll()." },
+  { id = "win32.closesocket", api = "closesocket", re = '\b(closesocket|ioctlsocket)\s*\(', msg = "WinSock close/ioctl.", sev = "low", fix = "Use close() / fcntl(O_NONBLOCK) or ioctl(FIONBIO); cf_platform.h maps them." },
+  { id = "win32.socket-types", api = "SOCKET", re = '\b(SOCKET|INVALID_SOCKET|SOCKET_ERROR)\b', msg = "WinSock socket handle types.", sev = "low", once = true, fix = "On POSIX sockets are int fds and errors are -1; cf_platform.h defines SOCKET/INVALID_SOCKET." },
+  { id = "win32.iocp", api = "IOCP", re = '\b(CreateIoCompletionPort|GetQueuedCompletionStatus(Ex)?|PostQueuedCompletionStatus)\s*\(', msg = "I/O completion ports.", sev = "blocker", fix = "Use epoll (Linux), kqueue (macOS/FreeBSD) or io_uring; asio/libuv abstract all of them." },
+  { id = "win32.overlapped", api = "OVERLAPPED", re = '\bOVERLAPPED\b', msg = "Overlapped (async) I/O structures.", sev = "high", once = true, fix = "Use non-blocking fds + epoll/kqueue, or asio." },
+]
+
+# --- strings / CRT ------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "other"
+sev = "low"
+fix = "Use the standard/POSIX equivalent; cf_platform.h maps the common MSVC names (auto-rewritten where safe)."
+rules = [
+  { id = "win32.stricmp", api = "_stricmp", re = '\b_?(stricmp|strnicmp|_stricmp|_strnicmp|_wcsicmp|_wcsnicmp)\s*\(', msg = "MSVC case-insensitive compare.", fix = "Rewritten to cf_stricmp/cf_strnicmp (strcasecmp/strncasecmp on POSIX)." },
+  { id = "win32.secure-crt", api = "strcpy_s", re = '\b(strcpy_s|strncpy_s|strcat_s|strncat_s|sprintf_s|swprintf_s|vsprintf_s|sscanf_s|_itoa_s|memcpy_s|wcscpy_s|localtime_s|gmtime_s)\s*\(', msg = "MSVC 'secure' CRT functions (Annex K is not available on glibc/libc++/BSD libc).", fix = "Use snprintf / strlcpy (macOS, FreeBSD, glibc 2.38+) / std::string; cf_platform.h provides fallbacks for the common ones." },
+  { id = "win32.snprintf", api = "_snprintf", re = '\b_(snprintf|vsnprintf|snwprintf|scprintf|vscprintf)\s*\(', msg = "Underscore-prefixed printf variants.", fix = "Rewritten to snprintf / vsnprintf (C99)." },
+  { id = "win32.itoa", api = "_itoa", re = '\b_?(itoa|ltoa|ultoa|i64toa|ui64toa|atoi64|strtoi64|strtoui64|strdup|strlwr|strupr|strrev)\s*\(', msg = "Non-standard MSVC CRT conversion/string helpers.", not = '\bstd::|\bstrdup\s*\(', fix = "Use snprintf, strtoll/strtoull, std::to_string, or tolower loops." },
+  { id = "win32.tchar-macros", api = "_T()/TCHAR", re = '\b(TCHAR|LPTSTR|LPCTSTR|_tcscpy|_tcslen|_tprintf|_tmain)\b|\b_T\s*\(', msg = "Generic-text (TCHAR) mappings.", once = true, fix = "Use char + UTF-8; convert to UTF-16 only at Windows API boundaries (MultiByteToWideChar)." },
+  { id = "win32.widechar", api = "wchar_t APIs", re = '\b(MultiByteToWideChar|WideCharToMultiByte)\s*\(', msg = "UTF-16 conversions (wchar_t is 32-bit on macOS/Linux/FreeBSD).", sev = "medium", fix = "Keep strings as UTF-8; use utf8cpp / simdutf or std::codecvt alternatives at API boundaries." },
+  { id = "win32.types", api = "DWORD/BOOL", re = '\b(DWORD|QWORD|BOOL|LPVOID|LPCSTR|LPSTR|LPCWSTR|LPWSTR|ULONG_PTR|DWORD_PTR|UINT_PTR|LONG_PTR|LPARAM|WPARAM|LRESULT|HRESULT)\b', msg = "Win32 typedefs (note: LONG is 32-bit on Windows but long is 64-bit on LP64 systems).", once = true, fix = "Use <stdint.h> types (uint32_t, int32_t, uintptr_t); cf_platform.h provides typedefs in strict mode." },
+  { id = "win32.zeromemory", api = "ZeroMemory", re = '\b(ZeroMemory|SecureZeroMemory|CopyMemory|MoveMemory|FillMemory)\s*\(', msg = "Win32 memory macros.", fix = "Rewritten to memset/memcpy/memmove." },
+  { id = "win32.aligned-malloc", api = "_aligned_malloc", re = '\b_aligned_(malloc|free|realloc)\s*\(', msg = "MSVC aligned allocation.", fix = "Use cf_aligned_alloc/cf_aligned_free (posix_memalign / aligned_alloc)." },
+  { id = "win32.alloca", api = "_alloca", re = '\b_(alloca|malloca|freea)\s*\(', msg = "MSVC stack allocation.", fix = "Use alloca from <alloca.h> (Linux/macOS) or <stdlib.h> (FreeBSD), or a fixed buffer." },
+  { id = "win32.getch", api = "_getch", re = '\b_(getch|getche|kbhit|putch)\s*\(', msg = "Console keyboard functions from <conio.h>.", cat = "input", fix = "Use termios raw mode or cf_getch()/cf_kbhit()." },
+  { id = "win32.byteswap", api = "_byteswap", re = '\b_byteswap_(ushort|ulong|uint64)\s*\(', msg = "MSVC byte-swap intrinsics.", fix = "Use __builtin_bswap16/32/64 or std::byteswap (C++23)." },
+  { id = "win32.bitscan", api = "_BitScanForward", re = '\b_BitScan(Forward|Reverse)(64)?\s*\(|\b__popcnt(64)?\s*\(|\b__lzcnt(64)?\s*\(', msg = "MSVC bit-scan intrinsics.", fix = "Use __builtin_ctz/__builtin_clz/__builtin_popcount or std::countr_zero / std::popcount (C++20)." },
+  { id = "win32.int64", api = "__int64", re = '\b(unsigned\s+)?__int(8|16|32|64)\b', msg = "MSVC sized integer keywords.", fix = "Use int64_t / uint64_t from <stdint.h>." },
+  { id = "win32.printf-i64", api = "%I64d", re = '%I64[dux]|%I32[dux]', msg = "MSVC-only printf length modifier.", fix = "Use PRId64 / PRIu64 from <inttypes.h> or %lld." },
+  { id = "win32.environ", api = "_environ", re = '\b(_environ|_wenviron|_putenv|_wputenv)\b', msg = "MSVC environment access.", fix = "Use environ / setenv / unsetenv." },
+  { id = "win32.errno-s", api = "_get_errno", re = '\b_(get|set)_errno\s*\(|\bstrerror_s\s*\(', msg = "MSVC errno accessors.", fix = "Use errno and strerror_r." },
+]
+
+# --- COM / misc Windows subsystems ---------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Replace the COM component with a portable library; isolate any remaining Windows-only code in a backend file."
+rules = [
+  { id = "win32.coinitialize", api = "CoInitialize", re = '\bCo(Initialize(Ex)?|Uninitialize|CreateInstance|TaskMemFree|CreateGuid)\s*\(', msg = "COM runtime." },
+  { id = "win32.comptr", api = "ComPtr", re = '\b(ComPtr|CComPtr|IUnknown|QueryInterface|__uuidof)\b', msg = "COM smart pointers / interfaces.", once = true },
+  { id = "win32.bstr", api = "BSTR", re = '\b(BSTR|SysAllocString|SysFreeString|VARIANT|SAFEARRAY)\b', msg = "COM automation types.", once = true },
+  { id = "win32.wmi", api = "WMI", re = '\b(IWbemLocator|IWbemServices|CLSID_WbemLocator)\b', msg = "WMI queries.", sev = "blocker", fix = "Query sysctl / /proc / IOKit per OS, or use a library like hwinfo/infoware." },
+  { id = "win32.winrt", api = "C++/WinRT", re = '\bwinrt::|#\s*include\s*[<"]winrt/', msg = "C++/WinRT (UWP) APIs.", sev = "blocker", fix = "Replace with portable libraries; WinRT has no equivalent on other OSes." },
+  { id = "win32.crypto", api = "CryptoAPI", re = '\b(CryptAcquireContext[AW]?|CryptGenRandom|BCryptGenRandom|CryptProtectData|CryptUnprotectData)\s*\(', msg = "Windows CryptoAPI / CNG.", cat = "other", fix = "Use getentropy()/arc4random_buf (macOS/FreeBSD), getrandom() (Linux), libsodium or OpenSSL; Keychain/libsecret for secret storage." },
+  { id = "win32.toolhelp", api = "Toolhelp32", re = '\b(CreateToolhelp32Snapshot|Process32First[W]?|Process32Next[W]?|Module32First[W]?)\s*\(', msg = "Process enumeration.", cat = "process", fix = "Read /proc (Linux), sysctl KERN_PROC (FreeBSD/macOS) or libproc (macOS)." },
+  { id = "win32.hooks", api = "SetWindowsHookEx", re = '\bSetWindowsHookEx[AW]?\s*\(', msg = "Global input hooks.", sev = "blocker", cat = "input", fix = "No direct equivalent: CGEventTap (macOS, needs accessibility permission), evdev/libinput (Linux), X11 XRecord." },
+  { id = "win32.rawinput", api = "RawInput", re = '\b(RegisterRawInputDevices|GetRawInputData|GetRawInputDeviceList)\s*\(', msg = "Win32 Raw Input.", cat = "input", fix = "Use SDL3 relative mouse mode / SDL_GetKeyboardState; SDL handles raw input per OS." },
+  { id = "win32.getasynckeystate", api = "GetAsyncKeyState", re = '\bGet(Async)?KeyState\s*\(|\bGetKeyboardState\s*\(', msg = "Polls Win32 keyboard state.", cat = "input", sev = "medium", fix = "Use SDL_GetKeyboardState / glfwGetKey." },
+  { id = "win32.vk-codes", api = "VK_*", re = '\bVK_(ESCAPE|RETURN|SPACE|LEFT|RIGHT|UP|DOWN|SHIFT|CONTROL|MENU|TAB|BACK|F1|F2|F3|F4|F5|LBUTTON|RBUTTON)\b', msg = "Win32 virtual-key codes.", cat = "input", sev = "medium", once = true, fix = "Map to SDL_Scancode / SDL_Keycode (SDL_SCANCODE_ESCAPE...) or GLFW_KEY_*." },
+  { id = "win32.pdh", api = "PDH", re = '\bPdh(OpenQuery|AddCounter|CollectQueryData)\w*\s*\(', msg = "Performance Data Helper counters.", sev = "medium", fix = "Read /proc/stat (Linux), host_statistics (macOS), sysctl kern.cp_time (FreeBSD)." },
+  { id = "win32.etw", api = "ETW", re = '\b(EventRegister|EventWriteString|TraceLoggingRegister)\s*\(', msg = "Event Tracing for Windows.", sev = "medium", fix = "Use os_signpost (macOS), LTTng/perf (Linux), DTrace (FreeBSD/macOS), or Tracy profiler for all." },
+  { id = "win32.gamebar", api = "GameInput", re = '#\s*include\s*[<"](?i:gameinput\.h|xgameruntime\.h|xsapi)', msg = "Microsoft GDK / GameInput.", sev = "blocker", cat = "input", fix = "Use SDL3 gamepad API (SDL_OpenGamepad) and a platform-neutral online backend." },
+]
+
+# --- MSVC compiler extensions ---------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "build"
+sev = "low"
+fix = "Use portable macros from cf_platform.h (CF_EXPORT, CF_FORCEINLINE, CF_ALIGN...) — auto-rewritten."
+rules = [
+  { id = "msvc.declspec-dll", api = "__declspec(dllexport)", re = '__declspec\s*\(\s*dll(export|import)\s*\)', msg = "MSVC DLL export/import attribute.", fix = "Rewritten to CF_EXPORT / CF_IMPORT (__attribute__((visibility(\"default\"))) on GCC/Clang)." },
+  { id = "msvc.declspec-other", api = "__declspec", re = '__declspec\s*\(\s*(align|noinline|noreturn|thread|novtable|selectany|naked|restrict|deprecated)', msg = "MSVC __declspec attribute.", fix = "Rewritten to CF_ALIGN(n) / CF_NOINLINE / CF_NORETURN / CF_THREAD_LOCAL; others: use C++11 attributes ([[noreturn]], alignas)." },
+  { id = "msvc.forceinline", api = "__forceinline", re = '\b__forceinline\b', msg = "MSVC force-inline keyword.", fix = "Rewritten to CF_FORCEINLINE (inline __attribute__((always_inline)))." },
+  { id = "msvc.callconv", api = "__stdcall", re = '\b(__stdcall|__cdecl|__fastcall|__vectorcall|WINAPI|CALLBACK|APIENTRY)\b', msg = "x86 calling-convention keywords.", once = true, fix = "Drop them off Windows (they are no-ops on x64/ARM64); cf_platform.h defines them empty." },
+  { id = "msvc.pragma-comment", api = "#pragma comment(lib)", re = '#\s*pragma\s+comment\s*\(\s*lib', msg = "Links libraries via #pragma (MSVC-only; ignored by GCC/Clang).", sev = "medium", fix = "Move link dependencies into the build system (target_link_libraries); the pragma is wrapped in #ifdef _MSC_VER." },
+  { id = "msvc.pragma-warning", api = "#pragma warning", re = '#\s*pragma\s+warning\s*\(', msg = "MSVC warning pragmas (GCC/Clang warn about unknown pragmas).", fix = "Wrap in #ifdef _MSC_VER or use #pragma GCC diagnostic on other compilers." },
+  { id = "msvc.pragma-region", api = "#pragma region", re = '#\s*pragma\s+(region|endregion)\b', msg = "Editor region pragmas (harmless, -Wunknown-pragmas noise).", sev = "info" },
+  { id = "msvc.assume", api = "__assume", re = '\b__assume\s*\(', msg = "MSVC optimizer hint.", fix = "Use __builtin_assume (Clang) / __builtin_unreachable (GCC) or [[assume]] (C++23)." },
+  { id = "msvc.sal", api = "SAL annotations", re = '\b(_In_|_Out_|_Inout_|_In_opt_|_Out_opt_|_In_reads_|_Out_writes_|_Ret_maybenull_|_Check_return_)\b', msg = "SAL source annotations.", once = true, fix = "Define them empty off MSVC (cf_platform.h does)." },
+  { id = "msvc.inline-asm", api = "__asm", re = '\b__asm\b\s*\{|\b_asm\b\s*\{', msg = "MSVC inline assembly blocks (x86 only; not supported on x64 MSVC nor ARM64).", sev = "blocker", fix = "Rewrite with intrinsics (<immintrin.h>/<arm_neon.h>) or portable C; SIMDe / sse2neon help on Apple Silicon." },
+  { id = "msvc.uuid", api = "__declspec(uuid)", re = '__declspec\s*\(\s*uuid', msg = "COM interface uuids.", sev = "high", cat = "other" },
+  { id = "msvc.wchar-main", api = "wmain", re = '\b(int|void)\s+wmain\s*\(', msg = "Wide-character entry point.", sev = "medium", fix = "Use int main(int argc, char** argv) with UTF-8 (set activeCodePage=UTF-8 in the Windows manifest)." },
+  { id = "msvc.stdafx", api = "stdafx.h", re = '#\s*include\s*[<"](?i:stdafx\.h|pch\.h)[>"]', msg = "MSVC precompiled header convention.", sev = "info", fix = "Keep it, or use CMake target_precompile_headers()." },
+  { id = "msvc.mfc", api = "MFC", re = '#\s*include\s*[<"](?i:afxwin\.h|afx\w*\.h)[>"]|\bCWinApp\b|\bCDialog(Ex)?\b', msg = "MFC application framework.", sev = "blocker", cat = "ui", fix = "Port the UI to Qt 6 or wxWidgets (closest MFC-like model); business logic can stay." },
+  { id = "msvc.atl", api = "ATL/WTL", re = '#\s*include\s*[<"](?i:atl\w*\.h|wtl\w*\.h)[>"]', msg = "ATL/WTL templates.", sev = "high", cat = "ui", fix = "Replace with standard C++ and a portable UI toolkit." },
+]

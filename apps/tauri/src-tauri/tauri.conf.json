@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Crossfire",
+  "version": "0.1.0",
+  "identifier": "io.github.crossfire.app",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../../ui run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm --prefix ../../ui run build",
+    "frontendDist": "../../../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Crossfire",
+        "width": 1360,
+        "height": 880,
+        "minWidth": 980,
+        "minHeight": 640,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#08070d"
+      }
+    ],
+    "security": { "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:" }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "appimage", "deb", "rpm", "nsis", "msi"],
+    "category": "DeveloperTool",
+    "shortDescription": "Port any project to every desktop OS",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "macOS": { "minimumSystemVersion": "11.0" },
+    "linux": { "appimage": { "bundleMediaFramework": false } }
+  }
+}

@@ -1,0 +1,74 @@
+# POSIX / Unix APIs: portable among macOS, Linux and FreeBSD but missing on
+# Windows (MSVC). MinGW/Cygwin cover some of them.
+
+[[group]]
+lang = ["cfam"]
+os = ["macos", "linux", "freebsd"]
+cat = "other"
+sev = "medium"
+fix = "On Windows use the Win32/CRT equivalent behind #ifdef _WIN32, or the C++ standard library; cf_platform.h covers the common helpers."
+rules = [
+  { id = "posix.unistd", api = "unistd.h", re = '#\s*include\s*<unistd\.h>', msg = "<unistd.h> does not exist with MSVC.", sev = "low", windows = "Wrapped in #ifndef _WIN32 (auto-rewritten); cf_platform.h supplies usleep/getpid/access mappings via <io.h>/<process.h>." },
+  { id = "posix.pthread", api = "pthreads", re = '#\s*include\s*<pthread\.h>|\bpthread_(create|join|detach|mutex_\w+|cond_\w+|rwlock_\w+|key_create|once)\s*\(', msg = "POSIX threads (MSVC has no pthreads).", cat = "threading", windows = "Use std::thread/std::mutex (C++11) or C11 <threads.h> (MSVC 17.8+); pthreads4w via vcpkg as a stopgap." },
+  { id = "posix.fork", api = "fork/exec", re = '\b(fork|vfork|execv|execvp|execve|execl|execlp|execle)\s*\(', msg = "fork/exec process model (Windows has no fork).", cat = "process", sev = "high", windows = "CreateProcessW, or portable posix_spawn wrappers (reproc, boost::process, SDL_CreateProcess)." },
+  { id = "posix.posix-spawn", api = "posix_spawn", re = '#\s*include\s*<spawn\.h>|\bposix_spawnp?\s*\(', msg = "posix_spawn (not on Windows).", cat = "process", windows = "CreateProcessW or reproc / SDL_CreateProcess." },
+  { id = "posix.waitpid", api = "waitpid", re = '#\s*include\s*<sys/wait\.h>|\b(waitpid|wait3|wait4)\s*\(|\bWIFEXITED\b', msg = "POSIX child process reaping.", cat = "process", windows = "WaitForSingleObject + GetExitCodeProcess." },
+  { id = "posix.pipe", api = "pipe/popen", re = '\b(pipe|mkfifo)\s*\(|\bpopen\s*\(|\bpclose\s*\(', msg = "POSIX pipes / popen.", cat = "process", sev = "low", windows = "_popen/_pclose and _pipe exist in the MSVC CRT (cf_platform.h maps popen); CreatePipe for full control." },
+  { id = "posix.signals", api = "signals", re = '\b(sigaction|sigprocmask|sigemptyset|pthread_sigmask|kill|raise|alarm)\s*\(|\bSIG(PIPE|CHLD|HUP|USR1|USR2|ALRM|KILL|QUIT|TSTP|CONT)\b', msg = "POSIX signal handling (Windows only has SIGINT/SIGTERM/SIGABRT/SIGSEGV via signal()).", cat = "process", windows = "SetConsoleCtrlHandler for Ctrl-C/close, structured exception handling for crashes; ignore SIGPIPE-only logic." },
+  { id = "posix.mmap", api = "mmap", re = '#\s*include\s*<sys/mman\.h>|\b(mmap|munmap|mprotect|madvise|msync|mlock|shm_open|shm_unlink)\s*\(', msg = "POSIX memory mapping / shared memory.", cat = "process", windows = "CreateFileMapping + MapViewOfFile / VirtualAlloc; mio wraps file mapping portably." },
+  { id = "posix.dlopen", api = "dlopen", re = '#\s*include\s*<dlfcn\.h>|\b(dlopen|dlsym|dlclose|dlerror|dladdr)\s*\(', msg = "Runtime library loading via dlopen.", cat = "dynamicLibrary", windows = "LoadLibraryW/GetProcAddress, or cf_dlopen/cf_dlsym (SDL_LoadObject) everywhere." },
+  { id = "posix.usleep", api = "usleep/nanosleep", re = '\b(usleep|nanosleep|sleep)\s*\(', msg = "POSIX sleep functions (not in MSVC).", cat = "timing", sev = "low", not = '\b(SDL|std::this_thread|Thread)\b', windows = "Rewritten to cf_sleep_us()/cf_sleep_ms(); or std::this_thread::sleep_for." },
+  { id = "posix.gettimeofday", api = "gettimeofday", re = '#\s*include\s*<sys/time\.h>|\bgettimeofday\s*\(', msg = "gettimeofday (not in MSVC).", cat = "timing", sev = "low", windows = "std::chrono::system_clock or GetSystemTimePreciseAsFileTime; cf_platform.h provides gettimeofday on MSVC." },
+  { id = "posix.clock-gettime", api = "clock_gettime", re = '\bclock_gettime\s*\(', msg = "clock_gettime (MSVC lacks it; MinGW has it).", cat = "timing", sev = "low", windows = "std::chrono::steady_clock or QueryPerformanceCounter; cf_platform.h provides clock_gettime(CLOCK_MONOTONIC/REALTIME) on MSVC." },
+  { id = "posix.sockets", api = "BSD sockets headers", re = '#\s*include\s*<(sys/socket\.h|netinet/in\.h|netinet/tcp\.h|arpa/inet\.h|netdb\.h|sys/un\.h|net/if\.h|ifaddrs\.h)>', msg = "BSD socket headers (Windows uses <winsock2.h>/<ws2tcpip.h>).", cat = "networking", sev = "low", windows = "Include <winsock2.h>/<ws2tcpip.h> under #ifdef _WIN32, call WSAStartup, use closesocket (cf_platform.h does this)." },
+  { id = "posix.close-socket", api = "close(sock)", re = '\bclose\s*\(\s*\w*(sock|fd|conn|client|server)\w*\s*\)', msg = "Closes a socket with close() (WinSock requires closesocket()).", cat = "networking", sev = "low", windows = "Use cf_closesocket() (closesocket on Windows)." },
+  { id = "posix.select-poll", api = "poll/select", re = '#\s*include\s*<(poll\.h|sys/select\.h)>|\bpoll\s*\(\s*\w+\s*,', msg = "poll()/select() on fds.", cat = "networking", sev = "low", windows = "WSAPoll for sockets only (not pipes/files); libuv/asio for a uniform loop." },
+  { id = "posix.termios", api = "termios", re = '#\s*include\s*<(termios\.h|sys/ioctl\.h)>|\btc(get|set)attr\s*\(|\bTIOCGWINSZ\b', msg = "Terminal control (raw mode, window size).", cat = "input", windows = "SetConsoleMode / GetConsoleScreenBufferInfo; or use a portable TUI library (FTXUI, notcurses, crossterm)." },
+  { id = "posix.ncurses", api = "ncurses", re = '#\s*include\s*[<"](n?curses\.h|ncurses/\w+\.h)[>"]', msg = "curses terminal UI.", cat = "ui", windows = "PDCurses (vcpkg pdcurses) offers the same API on Windows; or FTXUI." },
+  { id = "posix.pwd", api = "getpwuid", re = '#\s*include\s*<(pwd\.h|grp\.h)>|\b(getpwuid|getpwnam|getgrgid|getuid|geteuid|getgid|setuid|setgid|getlogin)(_r)?\s*\(', msg = "Unix users/groups.", cat = "process", windows = "GetUserNameW / token APIs; for home dir use cf_home_dir() (SHGetKnownFolderPath)." },
+  { id = "posix.dirent", api = "dirent.h", re = '#\s*include\s*<dirent\.h>|\b(opendir|readdir|closedir|scandir)\s*\(', msg = "POSIX directory iteration.", cat = "filesystem", sev = "low", windows = "std::filesystem::directory_iterator (C++17) or FindFirstFileW; dirent.h shims exist (tronkko/dirent)." },
+  { id = "posix.fcntl", api = "fcntl/flock", re = '\b(fcntl|flock|lockf|fsync|fdatasync|ftruncate|truncate|realpath|symlink|readlink|chmod|fchmod|chown|umask|link|mkstemp|mkdtemp)\s*\(', msg = "POSIX file-descriptor/file-system calls.", cat = "filesystem", sev = "low", not = '"/proc/self/exe"', windows = "Use std::filesystem (permissions, create_symlink, canonical), _commit/_chsize_s/LockFileEx on Windows." },
+  { id = "posix.tmp-path", api = "/tmp", re = '"/tmp/|"/var/tmp/', msg = "Hard-coded /tmp path.", cat = "filesystem", sev = "low", lang = ["cfam", "python", "go", "rust", "js", "java", "csharp", "lua"], windows = "Use std::filesystem::temp_directory_path() / tempfile / os.TempDir() / Path.GetTempPath()." },
+  { id = "posix.dev-null", api = "/dev/null", re = '"/dev/(null|zero|urandom|random|tty)"', msg = "Unix device paths.", cat = "filesystem", sev = "low", lang = ["cfam", "python", "go", "rust", "js", "java", "csharp", "lua"], windows = "Use \"NUL\" on Windows, os.devnull in Python, BCryptGenRandom for randomness." },
+  { id = "posix.home-tilde", api = "~/ paths", re = '"~/[\w.]', msg = "Tilde home paths are expanded by shells, not by fopen().", cat = "filesystem", sev = "low", lang = ["cfam", "python", "go", "rust", "js", "java", "csharp", "lua"], os = ["macos", "linux", "freebsd", "windows"], fix = "Resolve with cf_home_dir() / Path.home() / os.UserHomeDir() / dirs::home_dir()." },
+  { id = "posix.strcasecmp", api = "strcasecmp", re = '#\s*include\s*<strings\.h>|\bstrn?casecmp\s*\(', msg = "strcasecmp (MSVC names it _stricmp).", sev = "low", windows = "Rewritten to cf_stricmp/cf_strnicmp; cf_platform.h maps them to _stricmp on Windows." },
+  { id = "posix.syslog", api = "syslog", re = '#\s*include\s*<syslog\.h>|\b(openlog|syslog|closelog)\s*\(', msg = "syslog logging.", sev = "low", windows = "Use the Event Log (ReportEventW) or a file/stderr logger (spdlog)." },
+  { id = "posix.getopt", api = "getopt", re = '#\s*include\s*<getopt\.h>|\bgetopt(_long)?\s*\(', msg = "getopt option parsing (missing on MSVC).", sev = "low", windows = "Use CLI11 / cxxopts / argparse, or bundle a getopt implementation." },
+  { id = "posix.uname", api = "uname", re = '#\s*include\s*<sys/utsname\.h>|\buname\s*\(', msg = "uname system information.", sev = "low", windows = "RtlGetVersion / GetNativeSystemInfo, or SDL_GetPlatform()." },
+  { id = "posix.resource", api = "getrlimit/getrusage", re = '#\s*include\s*<sys/resource\.h>|\b(getrlimit|setrlimit|getrusage|setpriority|getpriority|nice)\s*\(', msg = "Resource limits / usage.", cat = "process", sev = "low", windows = "GetProcessMemoryInfo / GetProcessTimes / SetPriorityClass." },
+  { id = "posix.ssize-t", api = "ssize_t", re = '\bssize_t\b', msg = "ssize_t is not defined by MSVC.", sev = "info", once = true, windows = "cf_platform.h typedefs ssize_t to SSIZE_T/ptrdiff_t on MSVC." },
+  { id = "posix.attribute", api = "__attribute__", re = '\b__attribute__\s*\(\(', msg = "GCC/Clang attributes (MSVC rejects them).", cat = "build", sev = "low", once = true, windows = "Use CF_* macros (CF_PACKED, CF_ALIGN, CF_UNUSED...) or C++11 attributes; clang-cl accepts most of them." },
+  { id = "posix.builtins", api = "__builtin_*", re = '\b__builtin_(expect|clz|ctz|popcount|bswap\d+|unreachable|trap|prefetch|assume_aligned|add_overflow|mul_overflow)\w*\s*\(', msg = "GCC/Clang builtins (MSVC lacks them).", cat = "build", sev = "low", windows = "Use _BitScanForward/__popcnt/_byteswap_* on MSVC, or C++20 <bit> (std::countl_zero, std::popcount, std::byteswap in C++23); clang-cl supports __builtin_*." },
+  { id = "posix.vla", api = "VLA / statement expressions", re = '\(\{\s*[^}]*;\s*\}\)|\btypeof\s*\(', msg = "GNU C extensions (statement expressions / typeof) unsupported by MSVC C.", cat = "build", sev = "low", once = true, windows = "Compile with clang-cl, or rewrite as inline functions / C23 typeof." },
+  { id = "posix.alloca-h", api = "alloca.h", re = '#\s*include\s*<alloca\.h>', msg = "<alloca.h> (MSVC: <malloc.h> _alloca; FreeBSD: <stdlib.h>).", sev = "low", os = ["linux", "macos"], fix = "cf_platform.h defines CF_ALLOCA portably." },
+  { id = "posix.path-max", api = "PATH_MAX", re = '\bPATH_MAX\b', msg = "PATH_MAX (MSVC uses MAX_PATH; Linux needs <limits.h>).", sev = "info", once = true, windows = "cf_platform.h defines PATH_MAX on Windows." },
+  { id = "posix.setenv", api = "setenv", re = '\b(setenv|unsetenv)\s*\(|\bextern\s+char\s*\*\*\s*environ\b', msg = "setenv/unsetenv/environ (MSVC: _putenv_s / _environ).", sev = "low", windows = "cf_platform.h maps setenv/unsetenv to _putenv_s on Windows." },
+  { id = "posix.ifaddrs", api = "getifaddrs", re = '\b(getifaddrs|freeifaddrs|if_nametoindex)\s*\(', msg = "Interface enumeration.", cat = "networking", windows = "GetAdaptersAddresses (iphlpapi)." },
+  { id = "posix.unix-socket", api = "AF_UNIX", re = '\bAF_(UNIX|LOCAL)\b', msg = "Unix domain sockets (Windows 10 1803+ supports AF_UNIX via <afunix.h>).", cat = "networking", sev = "low", windows = "Include <afunix.h>; paths are filesystem paths; abstract namespace sockets are Linux-only." },
+]
+
+# --- x86-only intrinsics: break on Apple Silicon / ARM64 -----------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows", "linux", "freebsd"]
+cat = "build"
+sev = "medium"
+fix = "Provide a scalar/NEON path or use SIMDe / sse2neon / Highway / xsimd so the code builds for arm64 (Apple Silicon, Windows on ARM, Linux ARM)."
+rules = [
+  { id = "simd.x86-headers", api = "SSE/AVX intrinsics", re = '#\s*include\s*<(x86intrin|immintrin|emmintrin|xmmintrin|pmmintrin|tmmintrin|smmintrin|nmmintrin|wmmintrin|avxintrin|avx2intrin)\.h>', msg = "x86 SIMD intrinsics header (fails on arm64, e.g. every current Mac).", macos = "Apple Silicon is arm64: use sse2neon.h or SIMDe, or build x86_64 only and run under Rosetta 2 (not recommended)." },
+  { id = "simd.x86-calls", api = "_mm_* intrinsics", re = '\b_mm(256|512)?_\w+\s*\(', msg = "x86 SSE/AVX intrinsic calls.", once = true, macos = "Translate with sse2neon / SIMDe or write NEON (<arm_neon.h>) paths." },
+  { id = "simd.cpuid", api = "cpuid", re = '\b__cpuid(ex)?\s*\(|#\s*include\s*<cpuid\.h>|\b__get_cpuid\s*\(', msg = "x86 CPUID feature detection.", sev = "low", macos = "Use sysctlbyname(\"hw.optional.*\") on macOS / arm64 feature registers; cpu_features library is portable." },
+  { id = "simd.inline-asm-gnu", api = "inline asm", re = '\b(__asm__|asm)\s*(volatile|__volatile__)?\s*\(\s*"', msg = "GNU inline assembly (architecture-specific; MSVC x64 has no inline asm).", sev = "high", os = ["linux", "macos", "freebsd"], fix = "Replace with intrinsics or portable C; keep per-arch fallbacks (x86_64 and arm64)." },
+  { id = "simd.neon", api = "NEON", re = '#\s*include\s*<arm_neon\.h>', msg = "ARM NEON intrinsics (fine on Apple Silicon/ARM; x86 hosts need a fallback).", sev = "low", os = ["macos"], fix = "Keep an SSE/scalar fallback for x86_64 Windows/Linux/FreeBSD, or use SIMDe." },
+]
+
+[[group]]
+lang = ["asm"]
+os = ["windows", "linux", "freebsd", "macos"]
+cat = "build"
+sev = "high"
+fix = "Assembly is tied to an architecture and object format/ABI (PE/COFF + Win64 ABI vs ELF/Mach-O + SysV); keep a C fallback and assemble per target (NASM -f win64/elf64/macho64)."
+rules = [
+  { id = "asm.file", api = "Assembly", re = '\S', once = true, msg = "Hand-written assembly source." },
+  { id = "asm.masm", api = "MASM", re = '^\s*(\.model|\.code|\.data|PROC\b|ENDP\b|END\s*$)|\bPROC\s+(FRAME|NEAR|FAR)\b', msg = "MASM syntax (ml64.exe is Windows-only).", once = true, os = ["windows"], fix = "Port to NASM/YASM or GAS (Intel syntax) so it assembles on all hosts; mind Win64 vs SysV calling conventions." },
+]

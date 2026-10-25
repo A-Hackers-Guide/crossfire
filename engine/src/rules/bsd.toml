@@ -1,0 +1,37 @@
+# BSD-family APIs (macOS shares kqueue/sysctl) and FreeBSD-specific gaps.
+
+[[group]]
+lang = ["cfam"]
+os = ["macos", "freebsd"]
+cat = "other"
+sev = "high"
+fix = "Use a portable event loop (libuv, libevent, asio) or provide an epoll backend for Linux and IOCP/WSAPoll for Windows."
+rules = [
+  { id = "bsd.kqueue", api = "kqueue", re = '#\s*include\s*<sys/event\.h>|\bkqueue\s*\(\s*\)|\bkevent(64)?\s*\(|\bEV_SET\s*\(', msg = "kqueue/kevent event notification (macOS + BSDs).", cat = "networking", linux = "Use epoll (+ inotify/timerfd/signalfd for the other filters) or libkqueue; libuv/asio wrap them.", windows = "Use IOCP/WSAPoll (libuv/asio)." },
+  { id = "bsd.sysctl", api = "sysctl", re = '#\s*include\s*<sys/sysctl\.h>|\bsysctl(byname|nametomib)?\s*\(', msg = "sysctl system queries (MIB names differ between macOS and FreeBSD; Linux removed sysctl(2)).", sev = "medium", cat = "process", linux = "Read /proc and /sys, or use sysconf()/sysinfo().", windows = "GetSystemInfo / GlobalMemoryStatusEx / GetLogicalProcessorInformation." },
+  { id = "bsd.strlcpy", api = "strlcpy", re = '\bstrl(cpy|cat)\s*\(', msg = "strlcpy/strlcat (BSD, macOS, glibc 2.38+; missing on older glibc and MSVC).", sev = "low", os = ["macos", "freebsd", "linux"], fix = "cf_platform.c provides cf_strlcpy fallbacks; or use snprintf." },
+  { id = "bsd.arc4random", api = "arc4random", re = '\barc4random(_buf|_uniform)?\s*\(', msg = "arc4random (BSD/macOS, glibc 2.36+; not on MSVC).", sev = "low", cat = "other", os = ["macos", "freebsd", "linux"], fix = "BCryptGenRandom on Windows; getrandom on older glibc; std::random_device for non-crypto use." },
+  { id = "bsd.getprogname", api = "getprogname", re = '\b(getprogname|setprogname)\s*\(', msg = "BSD program-name helpers (glibc lacks them).", sev = "low", os = ["macos", "freebsd"], fix = "program_invocation_short_name (glibc) / argv[0] / GetModuleFileName." },
+  { id = "bsd.funopen", api = "funopen", re = '\bfunopen\s*\(', msg = "BSD custom FILE streams.", sev = "medium", fix = "fopencookie (glibc) or a custom stream class; no Windows equivalent." },
+  { id = "bsd.sys-param", api = "BSD macros", re = '\b(__FreeBSD_version|__DragonFly_version|__NetBSD_Version__|__OpenBSD__)\b', msg = "BSD version macros.", sev = "info", os = ["freebsd"] },
+  { id = "bsd.mach-o-dyld", api = "dyld", re = '\b_dyld_(image_count|get_image_name|get_image_header|register_func_for_add_image)\s*\(', msg = "Mach-O dyld image introspection.", sev = "medium", os = ["macos"], cat = "dynamicLibrary", fix = "dl_iterate_phdr (Linux/FreeBSD), EnumProcessModules (Windows)." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["freebsd"]
+cat = "other"
+sev = "high"
+fix = "Guard FreeBSD-specific code with #ifdef __FreeBSD__ and provide Linux (/proc, epoll), macOS (sysctl, kqueue) and Windows equivalents."
+rules = [
+  { id = "bsd.oss", api = "OSS /dev/dsp", re = '#\s*include\s*<sys/soundcard\.h>|"/dev/dsp\d*"|\bSNDCTL_DSP_\w+\b', msg = "OSS audio (FreeBSD native; Linux only via legacy emulation).", cat = "audio", sev = "blocker", fix = "miniaudio / SDL3 audio (OSS backend on FreeBSD, CoreAudio/WASAPI/PipeWire elsewhere)." },
+  { id = "bsd.libprocstat", api = "libprocstat", re = '#\s*include\s*<libprocstat\.h>|\bprocstat_\w+\s*\(|\bKERN_PROC_PATHNAME\b', msg = "FreeBSD process introspection.", cat = "process", sev = "medium", fix = "/proc on Linux, libproc on macOS, Toolhelp32 on Windows (cf_executable_path covers the common case)." },
+  { id = "bsd.capsicum", api = "Capsicum", re = '#\s*include\s*<sys/capsicum\.h>|\bcap_(enter|rights_limit|getmode)\s*\(', msg = "Capsicum capability sandboxing.", cat = "process", fix = "seccomp/landlock (Linux), App Sandbox (macOS), AppContainer (Windows); make sandboxing optional." },
+  { id = "bsd.jail", api = "jail", re = '#\s*include\s*<sys/jail\.h>|\bjail_(attach|set|get)\s*\(', msg = "FreeBSD jails.", cat = "process", sev = "blocker", fix = "Containers/namespaces (Linux), no direct macOS/Windows equivalent." },
+  { id = "bsd.devd", api = "devd", re = '"/var/run/devd\.(seqpacket\.)?pipe"', msg = "devd event socket (FreeBSD hotplug).", cat = "input", fix = "udev monitor (Linux), IOKit notifications (macOS), RegisterDeviceNotification (Windows)." },
+  { id = "bsd.cpuset", api = "cpuset", re = '#\s*include\s*<sys/cpuset\.h>|\bcpuset_(setaffinity|getaffinity)\s*\(|\bcpuset_t\b', msg = "FreeBSD cpuset affinity.", cat = "threading", sev = "medium", fix = "sched_setaffinity (Linux), SetThreadAffinityMask (Windows), advisory thread_policy_set (macOS)." },
+  { id = "bsd.usr-local", api = "/usr/local paths", re = '"/usr/local/(etc|share|lib|include|bin)/', msg = "Hard-coded /usr/local prefix (FreeBSD ports, Homebrew on Intel macOS).", sev = "low", os = ["freebsd", "macos"], cat = "filesystem", lang = ["cfam", "python", "shell", "go", "rust"], fix = "Use the install prefix from the build system (CMAKE_INSTALL_PREFIX) or resolve relative to the executable; Linux distros use /usr, Homebrew on Apple Silicon uses /opt/homebrew." },
+  { id = "bsd.linux-only-ifdef", api = "#ifdef __linux__", re = '^\s*#\s*(el)?if(def)?\b.*\b__linux(__)?\b', msg = "Linux-only preprocessor branch: FreeBSD will fall into the #else path even if it supports the same API.", sev = "low", cat = "build", os = ["linux"], not = '__FreeBSD__|__unix__|__unix\b|_POSIX|__APPLE__|BSD', fix = "Check whether FreeBSD has the API (X11, PulseAudio, eventfd, timerfd, inotify via libinotify) and add `|| defined(__FreeBSD__)`.", linux = "Fine on Linux; verify the #else branch is a real implementation." },
+  { id = "bsd.apple-else-gap", api = "#if __APPLE__ #else", re = '^\s*#\s*if(def)?\b.*\b__APPLE__\b.*$', msg = "Apple-specific branch: make sure the #else covers Windows and both Linux and FreeBSD (not just Linux).", sev = "info", cat = "build", os = ["macos"], not = '__linux__|_WIN32|__FreeBSD__' },
+  { id = "bsd.bsd-make", api = "BSD make", re = '^\.(if|endif|for|endfor|include)\b', msg = "BSD make syntax (GNU make on Linux/macOS cannot parse it).", lang = ["make"], sev = "medium", cat = "build", once = true, fix = "Generate CMake/Meson, or require bmake (available on Linux/macOS via packages)." },
+]

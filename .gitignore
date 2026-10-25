@@ -1,0 +1,8 @@
+node_modules/
+dist/
+target/
+apps/tauri/src-tauri/gen/
+apps/electron/dist/
+.DS_Store
+*.log
+.env

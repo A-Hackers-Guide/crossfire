@@ -1,0 +1,11 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	objects = {
+		A1 /* Cocoa.framework */ = {isa = PBXFileReference; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		A2 /* Metal.framework */ = {isa = PBXFileReference; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		A3 /* MetalKit.framework */ = {isa = PBXFileReference; name = MetalKit.framework; sourceTree = SDKROOT; };
+		P1 /* Project object */ = {isa = PBXProject; buildSettings = { SDKROOT = macosx; }; };
+	};
+	rootObject = P1;
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.example.metalviewer</string>
+<key>CFBundleExecutable</key><string>MetalViewer</string>
+<key>CFBundleName</key><string>MetalViewer</string>
+</dict></plist>

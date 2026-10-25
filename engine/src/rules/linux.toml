@@ -1,0 +1,129 @@
+# Linux (and X11/Wayland desktop) APIs. X11, Wayland, Mesa, PulseAudio and
+# PipeWire are also available on FreeBSD, which is reflected in `os`.
+
+[[group]]
+lang = ["cfam"]
+os = ["linux", "freebsd"]
+cat = "windowing"
+sev = "blocker"
+fix = "Use SDL3 (SDL_CreateWindow, SDL_PollEvent) or GLFW, which speak X11, Wayland, Win32 and Cocoa."
+rules = [
+  { id = "linux.xlib-h", api = "Xlib", re = '#\s*include\s*[<"]X11/(Xlib|Xutil|Xatom|Xos|keysym|XKBlib)\.h[>"]', msg = "Xlib client headers.", macos = "Only via XQuartz (not shipped by default): port to SDL3/GLFW (Cocoa).", windows = "No X server by default: port to SDL3/GLFW (Win32)." },
+  { id = "linux.xopendisplay", api = "XOpenDisplay", re = '\bXOpenDisplay\s*\(', msg = "Connects to the X server." },
+  { id = "linux.xcreatewindow", api = "XCreateWindow", re = '\bX(Create(Simple)?Window|MapWindow|MapRaised|DestroyWindow|StoreName|SetWMProtocols|SetWMProperties|ResizeWindow|MoveWindow)\s*\(', msg = "Creates/manages an X11 window." },
+  { id = "linux.xevent", api = "XNextEvent", re = '\bX(NextEvent|PendingEvents|Pending|CheckWindowEvent|CheckTypedEvent|SelectInput|PeekEvent|Flush|Sync)\s*\(', msg = "X11 event loop.", fix = "while (SDL_PollEvent(&e)) { ... } (SDL3) / glfwPollEvents()." },
+  { id = "linux.xevent-types", api = "XEvent", re = '\b(XEvent|KeyPress|KeyRelease|ButtonPress|MotionNotify|ConfigureNotify|ClientMessage|Expose|XK_[A-Za-z0-9_]+)\b', msg = "X11 event types / keysyms.", sev = "high", once = true, fix = "Map to SDL_EVENT_* and SDL_Scancode / SDL_Keycode." },
+  { id = "linux.xdraw", api = "Xlib drawing", re = '\bX(DrawLine|DrawRectangle|FillRectangle|DrawString|PutImage|CreateGC|CreateImage|SetForeground|CopyArea|CreatePixmap)\s*\(', msg = "Xlib drawing / XImage blits.", cat = "graphics", fix = "SDL_Renderer (SDL_RenderFillRect, SDL_UpdateTexture + SDL_RenderTexture) or a GPU API." },
+  { id = "linux.xshm", api = "XShm/Xrandr/Xinput2", re = '#\s*include\s*[<"]X11/extensions/\w+\.h[>"]|\bXShm\w+\s*\(|\bXRR\w+\s*\(|\bXI(SelectEvents|QueryDevice)\s*\(', msg = "X11 extensions (MIT-SHM, RandR, XInput2).", sev = "high", fix = "SDL3 covers display modes (SDL_GetDisplays), raw mouse input and fast blits." },
+  { id = "linux.xcb", api = "xcb", re = '#\s*include\s*[<"]xcb/\w+\.h[>"]|\bxcb_(connect|create_window|map_window|wait_for_event|poll_for_event)\s*\(', msg = "XCB X11 protocol bindings." },
+  { id = "linux.wayland", api = "Wayland", re = '#\s*include\s*[<"](wayland-client(-core|-protocol)?|wayland-egl|xdg-shell[\w\-]*)\.h[>"]|\bwl_(display_connect|compositor|surface|registry|seat)\w*\b|\bxdg_(surface|toplevel|wm_base)\w*\b', msg = "Wayland client protocol.", fix = "SDL3/GLFW speak Wayland natively; no need to talk to wl_* directly." },
+  { id = "linux.xkbcommon", api = "xkbcommon", re = '#\s*include\s*[<"]xkbcommon/\w+\.h[>"]|\bxkb_(context|keymap|state)_\w+\s*\(', msg = "xkbcommon keymap handling.", sev = "high", cat = "input", fix = "SDL3 text input (SDL_EVENT_TEXT_INPUT) and key mapping." },
+  { id = "linux.drm-kms", api = "DRM/KMS", re = '#\s*include\s*[<"](xf86drm(Mode)?\.h|drm/\w+\.h|gbm\.h)[>"]|\bdrmMode\w+\s*\(|\bgbm_\w+\s*\(', msg = "Direct DRM/KMS/GBM rendering (no display server).", cat = "graphics", fix = "SDL3 has a KMSDRM backend on Linux; other OSes need a windowed backend." },
+  { id = "linux.fbdev", api = "/dev/fb0", re = '"/dev/fb\d"|#\s*include\s*<linux/fb\.h>', msg = "Linux framebuffer device.", cat = "graphics", os = ["linux"], fix = "Render into an SDL texture instead." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["linux", "freebsd"]
+cat = "ui"
+sev = "high"
+fix = "GTK runs on Windows/macOS only via MSYS2/Homebrew and looks foreign there; consider Qt 6, wxWidgets, or Dear ImGui for a native-feeling port."
+rules = [
+  { id = "linux.gtk", api = "GTK", re = '#\s*include\s*[<"]gtk/gtk\.h[>"]|\bgtk_(init|window_new|application_new|main|widget_show\w*|button_new\w*)\s*\(', msg = "GTK user interface.", macos = "gtk4 from Homebrew works (non-native look); Qt 6 or wxWidgets give native widgets.", windows = "GTK via MSYS2/gvsbuild works; Qt 6 or wxWidgets are smoother on Windows." },
+  { id = "linux.glib", api = "GLib/GIO", re = '#\s*include\s*[<"](glib\.h|gio/gio\.h|glib-object\.h)[>"]|\bg_(main_loop_new|signal_connect|timeout_add|idle_add)\s*\(', msg = "GLib main loop / GObject.", sev = "medium", fix = "GLib itself is portable (vcpkg/Homebrew), but consider std:: equivalents to drop the dependency." },
+  { id = "linux.libnotify", api = "libnotify", re = '#\s*include\s*[<"]libnotify/notify\.h[>"]|\bnotify_notification_new\s*\(', msg = "Desktop notifications via libnotify.", sev = "medium", fix = "Wrap notifications per OS (UNUserNotificationCenter / WinRT toasts) or use a library like wintoast + libnotify." },
+  { id = "linux.appindicator", api = "AppIndicator", re = '#\s*include\s*[<"]libappindicator\w*/\w+\.h[>"]|\bapp_indicator_new\s*\(', msg = "System tray via AppIndicator.", fix = "SDL3 SDL_CreateTray or Qt QSystemTrayIcon." },
+  { id = "linux.dbus", api = "D-Bus", re = '#\s*include\s*[<"](dbus/dbus\.h|systemd/sd-bus\.h|gio/gdbus\w*\.h)[>"]|\bdbus_(bus_get|connection_\w+|message_new\w*)\s*\(|\bsd_bus_\w+\s*\(', msg = "D-Bus IPC (desktop services, portals).", cat = "process", fix = "Isolate behind an interface; use XPC/NSDistributedNotificationCenter (macOS) or named pipes/COM (Windows) as needed. FreeBSD has dbus from pkg." },
+  { id = "linux.portal", api = "xdg-desktop-portal", re = '\borg\.freedesktop\.portal\.\w+', msg = "XDG desktop portals.", sev = "medium", fix = "SDL3 SDL_ShowOpenFileDialog uses portals on Linux and native dialogs elsewhere." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["linux"]
+cat = "audio"
+sev = "blocker"
+fix = "Use miniaudio or SDL3 audio, which select ALSA/PulseAudio/PipeWire/OSS/sndio/CoreAudio/WASAPI at runtime."
+rules = [
+  { id = "linux.alsa-h", api = "ALSA", re = '#\s*include\s*[<"](alsa/asoundlib\.h|alsa/\w+\.h|sound/asound\.h)[>"]', msg = "ALSA audio.", freebsd = "FreeBSD's native audio is OSS; alsa-lib + alsa-plugins (pkg) can route ALSA to OSS, but miniaudio/SDL3 is simpler." },
+  { id = "linux.snd-pcm", api = "snd_pcm_open", re = '\bsnd_pcm_(open|writei|readi|set_params|hw_params\w*|prepare|drain|close|recover|avail_update)\s*\(', msg = "ALSA PCM playback/capture.", fix = "miniaudio: ma_device_init + data callback; SDL3: SDL_OpenAudioDeviceStream + SDL_PutAudioStreamData." },
+  { id = "linux.snd-mixer", api = "snd_mixer", re = '\bsnd_(mixer|ctl|seq|rawmidi)_\w+\s*\(', msg = "ALSA mixer / sequencer / raw MIDI.", sev = "high", fix = "Volume: per-stream gain in miniaudio/SDL3; MIDI: RtMidi / libremidi." },
+  { id = "linux.pulseaudio", api = "PulseAudio", re = '#\s*include\s*[<"]pulse/(simple|pulseaudio|context|stream)\.h[>"]|\bpa_(simple_new|simple_write|context_new|stream_new|mainloop_new|threaded_mainloop_new)\s*\(', msg = "PulseAudio client.", os = ["linux", "freebsd"], freebsd = "pulseaudio exists in FreeBSD ports but OSS is the default; miniaudio covers both." },
+  { id = "linux.pipewire", api = "PipeWire", re = '#\s*include\s*[<"](pipewire/pipewire\.h|spa/\w+(/\w+)*\.h)[>"]|\bpw_(init|main_loop_new|stream_new|thread_loop_new)\s*\(', msg = "PipeWire client.", os = ["linux", "freebsd"] },
+  { id = "linux.jack", api = "JACK", re = '#\s*include\s*[<"]jack/jack\.h[>"]|\bjack_client_open\s*\(', msg = "JACK audio (available on all four OSes but rarely installed outside Linux).", sev = "medium", os = ["linux", "freebsd", "macos", "windows"], fix = "Keep JACK optional; default to miniaudio/SDL3 output." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["linux"]
+cat = "input"
+sev = "high"
+fix = "Use SDL3 keyboard/mouse/gamepad APIs (they use evdev/libinput on Linux, IOKit/GameController on macOS, Raw Input/XInput on Windows)."
+rules = [
+  { id = "linux.evdev", api = "evdev", re = '#\s*include\s*[<"](linux/input\.h|linux/input-event-codes\.h|libevdev/libevdev\.h)[>"]|"/dev/input/(event|js)\d*|\blibevdev_\w+\s*\(', msg = "Reads evdev input devices directly.", freebsd = "FreeBSD has evdev (kern.evdev) + webcamd but device paths/permissions differ; prefer SDL3." },
+  { id = "linux.joystick", api = "linux/joystick.h", re = '#\s*include\s*[<"]linux/joystick\.h[>"]|\bJSIOCG\w+\b|\bjs_event\b', msg = "Legacy Linux joystick API." },
+  { id = "linux.uinput", api = "uinput", re = '#\s*include\s*[<"]linux/uinput\.h[>"]|"/dev/uinput"|\bUI_DEV_CREATE\b', msg = "Synthesises input via uinput.", sev = "blocker", fix = "No portable equivalent: SendInput (Windows), CGEventPost (macOS), uinput via evdev on FreeBSD." },
+  { id = "linux.libinput", api = "libinput", re = '#\s*include\s*[<"]libinput\.h[>"]|\blibinput_\w+\s*\(', msg = "libinput device handling.", os = ["linux", "freebsd"] },
+  { id = "linux.udev", api = "udev", re = '#\s*include\s*[<"]libudev\.h[>"]|\budev_(new|monitor_\w+|enumerate_\w+|device_\w+)\s*\(', msg = "udev device enumeration / hotplug.", cat = "other", freebsd = "Use devd(8) events or libudev-devd (pkg); SDL3 hotplug works on FreeBSD.", fix = "SDL3 device-added events; per-OS: SetupAPI/CM notifications (Windows), IOKit notifications (macOS)." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["linux"]
+cat = "other"
+sev = "high"
+fix = "Use a portable event loop (libuv, libevent, asio) or select kqueue (macOS/FreeBSD), epoll (Linux), IOCP (Windows) behind one interface."
+rules = [
+  { id = "linux.epoll", api = "epoll", re = '#\s*include\s*<sys/epoll\.h>|\bepoll_(create1?|ctl|wait|pwait)\s*\(', msg = "epoll event loop (Linux-only).", cat = "networking", macos = "kqueue/kevent is the macOS equivalent; libuv/asio wrap both.", freebsd = "Use kqueue (native) or the epoll-shim package which implements epoll on kqueue.", windows = "IOCP or WSAPoll; libuv/asio wrap them." },
+  { id = "linux.inotify", api = "inotify", re = '#\s*include\s*<sys/inotify\.h>|\binotify_(init1?|add_watch|rm_watch)\s*\(', msg = "inotify file watching.", cat = "filesystem", macos = "FSEvents or kqueue EVFILT_VNODE; efsw/dmon wrap them.", freebsd = "kqueue EVFILT_VNODE or libinotify (pkg libinotify).", windows = "ReadDirectoryChangesW; efsw/dmon wrap it." },
+  { id = "linux.eventfd", api = "eventfd", re = '#\s*include\s*<sys/eventfd\.h>|\beventfd\s*\(', msg = "eventfd wakeups.", cat = "threading", sev = "medium", fix = "Use a self-pipe (pipe2/pipe), kqueue EVFILT_USER (macOS/FreeBSD; FreeBSD 13+ also has eventfd), or a condition variable.", freebsd = "FreeBSD 13+ provides eventfd(2) natively." },
+  { id = "linux.timerfd", api = "timerfd", re = '#\s*include\s*<sys/timerfd\.h>|\btimerfd_(create|settime|gettime)\s*\(', msg = "timerfd timers.", cat = "timing", sev = "medium", fix = "kqueue EVFILT_TIMER (macOS/FreeBSD; FreeBSD 14+ also has timerfd) or a timer thread.", freebsd = "FreeBSD 14+ has timerfd(2); otherwise kqueue EVFILT_TIMER." },
+  { id = "linux.signalfd", api = "signalfd", re = '#\s*include\s*<sys/signalfd\.h>|\bsignalfd\s*\(', msg = "signalfd.", cat = "process", sev = "medium", fix = "kqueue EVFILT_SIGNAL (macOS/FreeBSD) or a self-pipe signal handler." },
+  { id = "linux.io-uring", api = "io_uring", re = '#\s*include\s*[<"](liburing\.h|linux/io_uring\.h)[>"]|\bio_uring_\w+\s*\(', msg = "io_uring async I/O.", cat = "filesystem", sev = "blocker", fix = "Abstract behind libuv/asio; kqueue + aio (FreeBSD), IOCP / IoRing (Windows), kqueue / GCD I/O (macOS)." },
+  { id = "linux.memfd", api = "memfd_create", re = '\bmemfd_create\s*\(', msg = "Anonymous memory file (Linux; FreeBSD 13+).", sev = "medium", cat = "process", os = ["linux", "freebsd"], fix = "shm_open(SHM_ANON) on FreeBSD, shm_open + shm_unlink on macOS, CreateFileMapping on Windows." },
+  { id = "linux.splice", api = "splice/sendfile", re = '\b(splice|tee|vmsplice|copy_file_range)\s*\(|#\s*include\s*<sys/sendfile\.h>', msg = "Linux zero-copy syscalls (sendfile signature differs on BSD/macOS).", sev = "medium", cat = "networking", fix = "Fallback to read/write loops; BSD sendfile(fd, s, off, n, hdtr, &sbytes, flags) differs; TransmitFile on Windows." },
+  { id = "linux.prctl", api = "prctl", re = '#\s*include\s*<sys/prctl\.h>|\bprctl\s*\(', msg = "prctl process controls.", sev = "medium", cat = "process", fix = "Per OS: procctl (FreeBSD), pthread_setname_np (thread names), no-op elsewhere." },
+  { id = "linux.sched-affinity", api = "sched_setaffinity", re = '\b(sched_setaffinity|sched_getaffinity|pthread_setaffinity_np|CPU_SET|cpu_set_t)\b', msg = "CPU affinity (Linux API).", sev = "medium", cat = "threading", fix = "cpuset_setaffinity (FreeBSD; or pthread_setaffinity_np with cpuset_t), thread_policy_set affinity tags (macOS, advisory), SetThreadAffinityMask (Windows)." },
+  { id = "linux.sysinfo", api = "sysinfo", re = '#\s*include\s*<sys/sysinfo\.h>|\b(sysinfo|get_nprocs|get_nprocs_conf|get_phys_pages)\s*\(', msg = "Linux sysinfo / get_nprocs.", sev = "medium", cat = "process", fix = "sysconf(_SC_NPROCESSORS_ONLN) / std::thread::hardware_concurrency(); sysctl hw.physmem (FreeBSD) / hw.memsize (macOS)." },
+  { id = "linux.linux-headers", api = "<linux/*.h>", re = '#\s*include\s*<linux/(?:[a-z0-9_]+/)*[a-z0-9_]+\.h>', msg = "Linux kernel UAPI header.", not = 'linux/(input|input-event-codes|joystick|uinput|fb|io_uring)\.h', fix = "Find the per-OS equivalent or guard the feature with #ifdef __linux__." },
+  { id = "linux.clock-raw", api = "CLOCK_MONOTONIC_RAW", re = '\bCLOCK_(MONOTONIC_RAW|BOOTTIME|REALTIME_COARSE|MONOTONIC_COARSE)\b', msg = "Linux-specific clock ids.", sev = "low", cat = "timing", fix = "Use CLOCK_MONOTONIC (all POSIX) or std::chrono::steady_clock; macOS has CLOCK_MONOTONIC_RAW, FreeBSD has CLOCK_MONOTONIC_FAST/CLOCK_UPTIME.", macos = "macOS 10.12+ supports CLOCK_MONOTONIC_RAW; CLOCK_BOOTTIME is missing (use CLOCK_MONOTONIC)." },
+  { id = "linux.nonblock-flags", api = "SOCK_NONBLOCK/accept4/pipe2", re = '\b(SOCK_NONBLOCK|SOCK_CLOEXEC|accept4|pipe2|dup3)\b|\bMSG_NOSIGNAL\b', msg = "Linux/BSD socket flags missing on macOS.", sev = "low", cat = "networking", os = ["linux", "freebsd"], fix = "Portable: socket() then fcntl(F_SETFL, O_NONBLOCK) / FD_CLOEXEC; on macOS use SO_NOSIGPIPE instead of MSG_NOSIGNAL." },
+  { id = "linux.getrandom", api = "getrandom", re = '#\s*include\s*<sys/random\.h>|\bgetrandom\s*\(', msg = "getrandom() (Linux, FreeBSD 12+; not on macOS/Windows).", sev = "low", os = ["linux", "freebsd"], fix = "getentropy() (macOS, FreeBSD, glibc 2.25+), arc4random_buf (BSD/macOS), BCryptGenRandom (Windows); or std::random_device." },
+  { id = "linux.capabilities", api = "libcap / seccomp / namespaces", re = '#\s*include\s*[<"](sys/capability\.h|seccomp\.h|linux/seccomp\.h|sched\.h)[>"].*|\b(unshare|setns|clone3?|cap_set_proc|seccomp_init)\s*\(', msg = "Linux sandboxing (capabilities, seccomp, namespaces).", sev = "high", cat = "process", not = '#\s*include\s*<sched\.h>', fix = "Capsicum / jails (FreeBSD), App Sandbox / sandbox_init (macOS), AppContainer / job objects (Windows)." },
+  { id = "linux.cgroups", api = "cgroups", re = '"/sys/fs/cgroup', msg = "cgroup filesystem access.", sev = "high", cat = "process", fix = "rctl (FreeBSD), job objects (Windows), no macOS equivalent." },
+]
+
+[[group]]
+lang = ["cfam", "python", "go", "rust", "js", "java", "csharp", "shell"]
+os = ["linux"]
+cat = "filesystem"
+sev = "medium"
+fix = "Use a portable API or per-OS helpers (cf_executable_path(), sysctl on BSD/macOS, Win32 APIs)."
+rules = [
+  { id = "linux.proc-self-exe", api = "/proc/self/exe", re = '"/proc/self/exe"', msg = "Locates the executable via /proc/self/exe.", fix = "cf_executable_path() (auto-rewritten for readlink): _NSGetExecutablePath (macOS), sysctl KERN_PROC_PATHNAME (FreeBSD), GetModuleFileNameW (Windows).", freebsd = "procfs is not mounted by default on FreeBSD: use sysctl({CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1})." },
+  { id = "linux.proc", api = "/proc", re = '"/proc/(self/|cpuinfo|meminfo|stat|loadavg|uptime|version|mounts|net/|\d+|sys/)', msg = "Reads Linux procfs.", freebsd = "Use sysctl(3)/libprocstat; linprocfs exists but is not mounted by default.", macos = "Use sysctl / libproc / host_statistics.", windows = "Use GetSystemInfo / GlobalMemoryStatusEx / Toolhelp32." },
+  { id = "linux.sys", api = "/sys", re = '"/sys/(class|devices|bus|block|kernel|power|firmware)/', msg = "Reads Linux sysfs.", fix = "Use sysctl / devinfo (FreeBSD), IOKit (macOS), SetupAPI / WMI (Windows)." },
+  { id = "linux.dev-shm", api = "/dev/shm", re = '"/dev/shm/', msg = "Hard-coded /dev/shm path.", sev = "low", fix = "Use shm_open() (POSIX) or CreateFileMapping (Windows)." },
+  { id = "linux.etc-os-release", api = "/etc/os-release", re = '"/etc/(os-release|lsb-release|debian_version|redhat-release|fedora-release|arch-release)"', msg = "Distro detection files.", sev = "low", fix = "Use uname(), SDL_GetPlatform(), or `freebsd-version`/sw_vers per OS." },
+  { id = "linux.usr-share", api = "/usr/share paths", re = '"/(usr/share|usr/lib|lib)/[\w\-]+', msg = "Hard-coded Linux system paths (FreeBSD uses /usr/local/share and /usr/local/lib for packages).", sev = "low", os = ["linux"], fix = "Resolve data relative to the executable (cf_resource_dir()) or via the build system (CMAKE_INSTALL_DATADIR)." },
+  { id = "linux.xdg-env", api = "XDG_* env", re = 'XDG_(CONFIG|DATA|CACHE|STATE|RUNTIME)_(HOME|DIR)', msg = "XDG base directory variables (Linux/FreeBSD convention).", sev = "low", os = ["linux", "freebsd"], fix = "Fine on Linux/FreeBSD; cf_user_data_dir() picks ~/Library/Application Support (macOS) or %APPDATA% (Windows)." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["linux"]
+cat = "other"
+sev = "low"
+fix = "Use the POSIX/BSD-compatible alternative or guard with #ifdef __GLIBC__."
+rules = [
+  { id = "glibc.gnu-source", api = "_GNU_SOURCE", re = '#\s*define\s+_GNU_SOURCE\b', msg = "Requests GNU extensions (glibc-specific APIs may follow).", sev = "info" },
+  { id = "glibc.version", api = "gnu_get_libc_version", re = '\bgnu_get_libc_version\s*\(|#\s*include\s*<gnu/libc-version\.h>|\b__GLIBC__\b', msg = "glibc version checks.", fix = "Guard with #ifdef __GLIBC__ (musl, FreeBSD libc, macOS libSystem lack it)." },
+  { id = "glibc.malloc-ext", api = "mallinfo/malloc_trim", re = '\b(mallinfo2?|malloc_trim|malloc_usable_size|mallopt|malloc_stats)\s*\(|#\s*include\s*<malloc\.h>', msg = "glibc malloc extensions (<malloc.h> does not exist on macOS).", fix = "malloc_size (macOS), malloc_usable_size via <malloc_np.h> (FreeBSD), _msize (Windows); or drop the call." },
+  { id = "glibc.program-name", api = "program_invocation_name", re = '\bprogram_invocation(_short)?_name\b', msg = "glibc program name globals.", fix = "getprogname() (macOS/FreeBSD) or argv[0]." },
+  { id = "glibc.backtrace", api = "backtrace()", re = '#\s*include\s*<execinfo\.h>|\bbacktrace(_symbols(_fd)?)?\s*\(', msg = "execinfo backtraces (glibc, macOS; FreeBSD needs -lexecinfo; not on Windows).", os = ["linux", "macos", "freebsd"], fix = "Link -lexecinfo on FreeBSD; use CaptureStackBackTrace / DbgHelp on Windows, or cpptrace / libunwind everywhere." },
+  { id = "glibc.strfuncs", api = "GNU string functions", re = '\b(strverscmp|strchrnul|mempcpy|rawmemchr|memrchr|strfry|canonicalize_file_name|euidaccess|get_current_dir_name)\s*\(', msg = "GNU-only string/file helpers.", fix = "Write a tiny fallback (several are in cf_platform.c) or use the POSIX equivalent (realpath, strchr...)." },
+  { id = "glibc.error-h", api = "error()/err.h", re = '#\s*include\s*<error\.h>|\berror_at_line\s*\(', msg = "GNU <error.h> reporting.", fix = "Use err()/warn() from <err.h> (BSD, macOS, glibc) or fprintf(stderr)." },
+  { id = "glibc.argp", api = "argp", re = '#\s*include\s*<argp\.h>|\bargp_parse\s*\(', msg = "glibc argp option parsing.", sev = "medium", fix = "Use getopt_long (BSD/macOS/glibc), or CLI11 / cxxopts / argparse (C++)." },
+  { id = "glibc.dlinfo", api = "dlinfo/dl_iterate_phdr", re = '\b(dlinfo|dl_iterate_phdr|dlmopen|dlvsym)\s*\(|\bRTLD_DEEPBIND\b', msg = "ELF/glibc dynamic linker extensions (no Mach-O/PE equivalent).", sev = "medium", cat = "dynamicLibrary", fix = "_dyld_image_count / _dyld_get_image_header (macOS), EnumProcessModules (Windows); FreeBSD supports dl_iterate_phdr." },
+  { id = "glibc.so-name", api = ".so library name", re = '"[\w\-\.]*lib[\w\-]+\.so(\.\d+)*"', msg = "Hard-coded ELF shared-object name.", sev = "medium", cat = "dynamicLibrary", os = ["linux", "freebsd"], lang = ["cfam", "python", "rust", "go", "js", "java", "csharp"], fix = "Build names per OS: libfoo.dylib (macOS), foo.dll (Windows); FreeBSD sonames often differ in version suffix (CF_SHARED_LIB_NAME)." },
+  { id = "linux.systemd", api = "systemd", re = '#\s*include\s*[<"]systemd/sd-(daemon|journal|login|event)\.h[>"]|\bsd_(notify|journal_print|booted|listen_fds)\s*\(', msg = "systemd integration.", sev = "medium", cat = "process", fix = "Make optional: rc.d + daemon(8) on FreeBSD, launchd on macOS, Windows services; log via syslog/stderr." },
+]

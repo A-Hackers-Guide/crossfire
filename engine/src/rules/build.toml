@@ -1,0 +1,181 @@
+# Build scripts and build-system files: batch/PowerShell, shell portability
+# (GNU vs BSD userland), CMake/Make/Xcode platform assumptions.
+
+[[group]]
+lang = ["batch"]
+os = ["windows"]
+cat = "build"
+sev = "medium"
+fix = "Provide an equivalent POSIX sh script (or move the logic into CMake/Python); Crossfire generates per-OS packaging scripts."
+rules = [
+  { id = "bat.file", api = "Batch script", re = '\S', once = true, msg = "Windows batch script (cmd.exe only)." },
+  { id = "bat.msbuild", api = "msbuild/devenv", re = '\b(msbuild|devenv|vcvarsall|vcvars64|VsDevCmd)(\.exe|\.bat)?\b', icase = true, msg = "Invokes Visual Studio build tools.", sev = "high", fix = "Use cmake --build (works with MSVC, Xcode, Ninja, Make)." },
+  { id = "bat.copy-del", api = "copy/xcopy/del", re = '^\s*@?(copy|xcopy|robocopy|del|rd|rmdir|move|mklink)\s', icase = true, msg = "cmd.exe file commands.", sev = "low", fix = "cp/rm/mv/ln in sh, or cmake -E copy / remove / make_directory (portable)." },
+  { id = "bat.dp0", api = "%~dp0", re = '%~dp0|%CD%|%cd%', msg = "Batch path variables.", sev = "low", fix = "In sh: \"$(cd \"$(dirname \"$0\")\" && pwd)\"." },
+]
+
+[[group]]
+lang = ["powershell"]
+os = ["windows"]
+cat = "build"
+sev = "low"
+fix = "PowerShell 7 (pwsh) runs on macOS/Linux (FreeBSD unofficially), but Windows-only cmdlets do not; prefer sh or Python for build steps."
+rules = [
+  { id = "ps.file", api = "PowerShell script", re = '\S', once = true, msg = "PowerShell script (pwsh 7 is cross-platform; Windows PowerShell 5.1 is not)." },
+  { id = "ps.registry", api = "HKLM:/HKCU: drives", re = '\b(HKLM|HKCU):\\', msg = "Registry provider paths.", sev = "high", cat = "registry" },
+  { id = "ps.windows-cmdlets", api = "Windows-only cmdlets", re = '\b(Get-WmiObject|Get-CimInstance|Get-ItemProperty\s+HK|New-Service|Get-Service|Set-ExecutionPolicy|Add-AppxPackage|Get-WindowsFeature|New-ScheduledTask\w*|Register-ScheduledTask)\b', msg = "Windows-only cmdlets.", sev = "high" },
+  { id = "ps.exe-calls", api = ".exe tools", re = '\b\w+\.exe\b', icase = true, msg = "Calls Windows executables.", once = true },
+  { id = "ps.env-appdata", api = "$env:APPDATA", re = '\$env:(APPDATA|LOCALAPPDATA|USERPROFILE|ProgramFiles|windir|TEMP)\b', icase = true, msg = "Windows-only environment variables.", fix = "Use [Environment]::GetFolderPath(...) or $HOME." },
+]
+
+[[group]]
+lang = ["shell"]
+os = ["linux"]
+cat = "build"
+sev = "low"
+fix = "Write POSIX sh or detect the userland (uname -s) and use portable flags; on FreeBSD/macOS, GNU tools are available as g* (gsed, greadlink) via pkg/Homebrew."
+rules = [
+  { id = "sh.bin-bash", api = "#!/bin/bash", re = '^#!\s*/bin/bash\b', msg = "Hard-coded /bin/bash (FreeBSD installs bash at /usr/local/bin/bash; macOS ships bash 3.2).", os = ["linux", "macos"], fix = "Use #!/usr/bin/env bash, or POSIX #!/bin/sh." },
+  { id = "sh.sed-i", api = "sed -i", re = '''\bsed\s+(-[a-zA-Z]*\s+)*-i(\s+-e|\s+''|\s*$|\s+['"]s)''', msg = "GNU sed -i syntax (BSD/macOS sed requires a suffix argument: -i '').", fix = "Use `sed -i.bak ... && rm file.bak` (works everywhere) or perl -pi -e." },
+  { id = "sh.readlink-f", api = "readlink -f", re = '\breadlink\s+-f\b', msg = "readlink -f (missing on macOS < 12.3).", fix = "Use realpath (macOS 13+, FreeBSD, Linux) or cd/pwd -P." },
+  { id = "sh.gnu-stat", api = "stat -c", re = '\bstat\s+(-[a-zA-Z]*\s+)*-c\b|\bstat\s+--format', msg = "GNU stat format (BSD stat uses -f).", fix = "Branch on uname, or use `wc -c < file` / `ls -l` for sizes." },
+  { id = "sh.date-d", api = "date -d", re = '\bdate\s+(-[a-zA-Z]*\s+)*-d\s', msg = "GNU date -d (BSD date uses -j -f).", fix = "Use python3 -c or gdate, or avoid date arithmetic in shell." },
+  { id = "sh.grep-p", api = "grep -P", re = '\bgrep\s+(-[a-zA-Z]*)?P', msg = "grep -P (PCRE) is GNU-only.", fix = "Use grep -E or perl." },
+  { id = "sh.nproc", api = "nproc", re = '\bnproc\b', msg = "nproc (GNU coreutils; macOS lacks it).", os = ["linux", "freebsd"], fix = "Use `getconf _NPROCESSORS_ONLN` (Linux/macOS/FreeBSD) or `sysctl -n hw.ncpu`." },
+  { id = "sh.pkg-managers", api = "apt/yum/dnf/pacman", re = '\b(apt-get|apt|yum|dnf|pacman|zypper|apk)\s+(install|update|-S)', msg = "Linux distro package manager.", sev = "medium", fix = "Add per-OS install steps: brew (macOS), pkg install (FreeBSD), winget/choco/vcpkg (Windows); or use vcpkg/Conan for libraries." },
+  { id = "sh.ldd", api = "ldd/patchelf", re = '\b(ldd|patchelf|objdump\s+-p|readelf)\b', msg = "ELF inspection tools.", os = ["linux", "freebsd"], fix = "otool -L / install_name_tool on macOS; dumpbin /dependents on Windows." },
+  { id = "sh.xargs-r", api = "xargs -r", re = '\bxargs\s+(-[a-zA-Z]*\s+)*-r\b', msg = "xargs -r is GNU-specific (BSD xargs does that by default but rejects -r on older macOS).", fix = "Drop -r on BSD/macOS or guard empty input." },
+  { id = "sh.timeout", api = "timeout", re = '^\s*timeout\s+\d', msg = "GNU timeout (macOS: gtimeout via coreutils; FreeBSD has timeout).", os = ["linux", "freebsd"] },
+  { id = "sh.md5sum", api = "md5sum/sha256sum", re = '\b(md5sum|sha1sum|sha256sum)\b', msg = "GNU checksum tools (macOS: shasum -a 256 / md5; FreeBSD: sha256 / md5).", os = ["linux"], fix = "Use `shasum -a 256` (macOS/Linux) or cmake -E sha256sum (everywhere)." },
+  { id = "sh.make-gnu", api = "make (GNU)", re = '^\s*make\s', msg = "Calls `make`: FreeBSD's make is bmake; GNU Makefiles need `gmake` there.", os = ["linux", "macos"], fix = "Use ${MAKE:-make} and document `gmake` on FreeBSD, or call cmake --build." },
+  { id = "sh.dev-shm-proc", api = "/proc in scripts", re = '/proc/(cpuinfo|meminfo|self)', msg = "procfs use in a script.", fix = "sysctl on macOS/FreeBSD." },
+]
+
+[[group]]
+lang = ["shell"]
+os = ["macos"]
+cat = "packaging"
+sev = "medium"
+fix = "Provide per-OS packaging: AppImage/deb/rpm/Flatpak (Linux), pkg (FreeBSD), NSIS/MSIX/zip (Windows)."
+rules = [
+  { id = "sh.codesign", api = "codesign/notarytool", re = '\b(codesign|notarytool|altool|stapler|spctl)\b', msg = "Apple code signing / notarization." },
+  { id = "sh.hdiutil", api = "hdiutil/pkgbuild", re = '\b(hdiutil|pkgbuild|productbuild|create-dmg)\b', msg = "macOS disk image / installer creation." },
+  { id = "sh.mac-tools", api = "lipo/install_name_tool", re = '\b(lipo|install_name_tool|otool|xcrun|xcodebuild|xcode-select|plutil|defaults\s+(read|write)|osascript|sw_vers|ditto)\b', msg = "macOS-only developer tools.", cat = "build" },
+  { id = "sh.brew", api = "brew", re = '\bbrew\s+(install|bundle|update)', msg = "Homebrew package installation.", cat = "build", sev = "low" },
+]
+
+[[group]]
+lang = ["shell"]
+os = ["freebsd"]
+cat = "build"
+sev = "low"
+fix = "Provide equivalents for Linux (apt/dnf), macOS (brew) and Windows (winget/vcpkg)."
+rules = [
+  { id = "sh.pkg-freebsd", api = "pkg install", re = '\bpkg\s+(install|add|create)\b|\bportsnap\b|\bposudo\b', msg = "FreeBSD package tools." },
+]
+
+# --- CMake --------------------------------------------------------------------------
+[[group]]
+lang = ["cmake"]
+os = ["windows"]
+cat = "build"
+sev = "medium"
+fix = "Use generator expressions / if(WIN32) blocks so other platforms get their own flags and libraries."
+rules = [
+  { id = "cmake.msvc-flags", api = "MSVC flags", re = '(add_compile_options|target_compile_options|CMAKE_C(XX)?_FLAGS)[^\n]*\s/(W[0-4]|WX|MP|EHsc|MT|MD|Zi|O2|GR-|permissive-|utf-8)\b', msg = "MSVC-only compiler flags applied unconditionally.", not = 'MSVC|\$<|if\s*\(\s*WIN32' },
+  { id = "cmake.win-libs", api = "Windows link libs", re = 'target_link_libraries\s*\([^)]*\b(d3d9|d3d11|d3d12|dxgi|d3dcompiler|dxguid|user32|gdi32|winmm|ws2_32|xinput|dinput8|dsound|ole32|shell32|comctl32|advapi32)\b', msg = "Links Windows system libraries unconditionally.", not = '\$<|WIN32', sev = "high", fix = "Wrap in if(WIN32) or $<$<PLATFORM_ID:Windows>:...>." },
+  { id = "cmake.vs-generator", api = "Visual Studio generator", re = '"Visual Studio \d+', msg = "Assumes a Visual Studio generator.", sev = "low", fix = "Let presets choose: Ninja / Unix Makefiles / Xcode per OS." },
+  { id = "cmake.win32-exe", api = "add_executable WIN32", re = 'add_executable\s*\(\s*\w+\s+WIN32\b', msg = "GUI subsystem executable (ignored elsewhere — also add MACOSX_BUNDLE for macOS).", sev = "info" },
+]
+
+[[group]]
+lang = ["cmake"]
+os = ["macos"]
+cat = "build"
+sev = "medium"
+fix = "Guard Apple frameworks with if(APPLE) and provide equivalents for other OSes."
+rules = [
+  { id = "cmake.frameworks", api = "-framework", re = '-framework\s+(Cocoa|AppKit|Metal|MetalKit|QuartzCore|IOKit|CoreAudio|AudioToolbox|AVFoundation|GameController|CoreFoundation|Foundation|CoreVideo|Carbon)', msg = "Links Apple frameworks.", not = 'if\s*\(\s*APPLE|\$<' },
+  { id = "cmake.find-library-framework", api = "find_library(Cocoa)", re = 'find_library\s*\(\s*\w+\s+(Cocoa|Metal|AppKit|IOKit|CoreAudio|QuartzCore)\b', msg = "Looks up Apple frameworks.", sev = "low" },
+]
+
+[[group]]
+lang = ["cmake"]
+os = ["linux", "freebsd"]
+cat = "build"
+sev = "medium"
+fix = "Guard with if(UNIX AND NOT APPLE) and select per-OS backends."
+rules = [
+  { id = "cmake.x11-alsa", api = "find_package(X11/ALSA)", re = 'find_package\s*\(\s*(X11|ALSA|PulseAudio|Wayland|PkgConfig)\b|pkg_check_modules\s*\([^)]*\b(gtk\+?-?[34]|alsa|libpulse|x11|wayland-client|libudev|dbus-1)\b', msg = "Requires Linux desktop libraries.", not = 'if\s*\(' },
+  { id = "cmake.linux-libs", api = "rt/dl link", re = 'target_link_libraries\s*\([^)]*\b(rt|asound|X11|Xrandr|Xi|udev|pulse)\b', msg = "Links Linux-specific libraries (librt does not exist on macOS; asound/udev not on FreeBSD by default).", os = ["linux"], not = '\$<|if\s*\(' },
+]
+
+[[group]]
+lang = ["cmake"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "build"
+sev = "info"
+fix = "Check that each platform block exists (WIN32, APPLE, CMAKE_SYSTEM_NAME STREQUAL \"Linux\"/\"FreeBSD\")."
+rules = [
+  { id = "cmake.platform-if", api = "if(WIN32/APPLE/UNIX)", re = '^\s*(else)?if\s*\(.*\b(WIN32|APPLE|UNIX|MSVC|LINUX|CMAKE_SYSTEM_NAME)\b', msg = "Platform-conditional CMake.", once = true },
+  { id = "cmake.old-minimum", api = "cmake_minimum_required", re = 'cmake_minimum_required\s*\(\s*VERSION\s+[23]\.([0-9]|1[0-5])(\.\d+)?\s*\)', msg = "Very old cmake_minimum_required (CMake 4 drops compatibility with < 3.5).", sev = "low", fix = "Raise to VERSION 3.16...3.31 or newer." },
+]
+
+# --- Make / qmake / Xcode -----------------------------------------------------------
+[[group]]
+lang = ["make"]
+os = ["linux"]
+cat = "build"
+sev = "medium"
+fix = "Generate CMake (Crossfire can) or add per-OS sections keyed on $(shell uname -s)."
+rules = [
+  { id = "make.linux-libs", api = "-lX11/-lasound/-lrt", re = '-l(X11|Xext|Xrandr|Xi|asound|pulse|pulse-simple|rt|udev|GL\b|EGL|gbm|drm)\b', msg = "Links Linux-specific libraries.", fix = "macOS: frameworks via -framework; FreeBSD: same X11 libs from /usr/local/lib but OSS audio; Windows: different libs entirely." },
+  { id = "make.gnu-ld", api = "GNU ld flags", re = '-Wl,(--as-needed|--no-undefined|--start-group|--end-group|--gc-sections|-soname|--version-script|-z,)', msg = "GNU ld options (Apple ld64 rejects them).", sev = "low", fix = "On macOS use -Wl,-dead_strip, -install_name, -exported_symbols_list." },
+  { id = "make.origin", api = "$ORIGIN rpath", re = '\$\$?ORIGIN', msg = "ELF $ORIGIN rpath (macOS uses @loader_path/@executable_path).", sev = "low" },
+  { id = "make.gnu-features", api = "GNU make features", re = '\$\((shell|wildcard|patsubst|foreach|call|eval|filter)\b|^ifeq\s*\(|^ifneq\s*\(', msg = "GNU make functions (FreeBSD needs gmake).", sev = "low", once = true, os = ["linux", "macos"], fix = "Document `gmake` on FreeBSD or generate CMake." },
+  { id = "make.exe-ext", api = ".exe / cl.exe", re = '\b(cl|link)\.exe\b|\.exe\b|\bnmake\b', msg = "Windows toolchain/extension in a Makefile.", os = ["windows"], once = true },
+  { id = "make.framework", api = "-framework (Make)", re = '-framework\s+\w+', msg = "Apple frameworks in a Makefile.", os = ["macos"], once = true },
+]
+
+[[group]]
+lang = ["xcode"]
+os = ["macos"]
+cat = "build"
+sev = "medium"
+fix = "Generate a CMake project (CMake can still produce Xcode projects with -G Xcode) so Windows/Linux/FreeBSD can build."
+rules = [
+  { id = "xcode.project", api = "Xcode project", re = '\bisa = PBXProject\b', msg = "Xcode project (macOS-only build system).", once = true },
+  { id = "xcode.frameworks", api = "Linked frameworks", re = '\b(\w+)\.framework\b', msg = "Links Apple frameworks.", once = true, sev = "high" },
+  { id = "xcode.sdkroot", api = "SDKROOT", re = '\bSDKROOT\s*=\s*(macosx|iphoneos)', msg = "Apple SDK target.", once = true, sev = "info" },
+]
+
+[[group]]
+lang = ["qmake"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "build"
+sev = "low"
+fix = "qmake is portable but deprecated in Qt 6; consider qt_add_executable in CMake."
+rules = [
+  { id = "qmake.win-libs", api = "win32: LIBS", re = '^\s*win32\s*[:{]', msg = "Windows-specific qmake scope — check macx/unix scopes exist.", once = true },
+  { id = "qmake.project", api = "qmake project", re = '^\s*(QT|TEMPLATE|SOURCES)\s*\+?=', msg = "qmake project file.", once = true, sev = "info" },
+]
+
+[[group]]
+lang = ["winrc"]
+os = ["windows"]
+cat = "packaging"
+sev = "low"
+fix = "Keep for Windows; generate icons/metadata for macOS (Info.plist + .icns) and Linux/FreeBSD (.desktop + PNG)."
+rules = [
+  { id = "rc.resource", api = "Windows resources", re = '\b(ICON|VERSIONINFO|DIALOG(EX)?|MENU|STRINGTABLE|RT_MANIFEST|IDI_\w+)\b', msg = "Windows resource script / manifest.", once = true },
+]
+
+[[group]]
+lang = ["manifest"]
+os = ["linux", "freebsd"]
+cat = "packaging"
+sev = "info"
+fix = "Generate the equivalent metadata for Windows (.rc) and macOS (Info.plist)."
+rules = [
+  { id = "desktop.entry", api = ".desktop entry", re = '^\[Desktop Entry\]', msg = "Freedesktop launcher entry.", once = true },
+]

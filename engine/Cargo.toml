@@ -1,0 +1,28 @@
+[package]
+name = "crossfire-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Crossfire conversion engine: scan, convert, build and test cross-OS ports"
+license = "MIT"
+
+[lib]
+name = "crossfire_engine"
+path = "src/lib.rs"
+
+[[bin]]
+name = "crossfire-engine"
+path = "src/bin/cli.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+ignore = "0.4"
+regex = "1"
+similar = "2"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+toml = "1.1.8"
+
+[dev-dependencies]
+tempfile = "3"

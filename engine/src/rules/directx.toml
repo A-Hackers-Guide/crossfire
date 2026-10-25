@@ -1,0 +1,135 @@
+# DirectX family, Windows multimedia, plus cross-platform graphics APIs whose
+# per-OS glue (WGL/GLX/CGL, Vulkan surfaces) needs attention.
+
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "graphics"
+sev = "blocker"
+fix = "Port the renderer to SDL_GPU (SDL3) or Vulkan (+MoltenVK on macOS); alternatively bgfx / Diligent / WebGPU (wgpu-native, Dawn). Translation option: DXVK (Linux/FreeBSD), Game Porting Toolkit / D3DMetal (macOS)."
+rules = [
+  { id = "dx.d3d9-h", api = "Direct3D 9", re = '#\s*include\s*[<"](?i:d3d9\.h|d3dx9\w*\.h)[>"]', msg = "Direct3D 9 renderer.", linux = "SDL_GPU / OpenGL 3.3 / Vulkan; translation: DXVK or Wine's wined3d.", freebsd = "SDL_GPU / OpenGL / Vulkan (drm-kmod); translation: DXVK under Wine.", macos = "SDL_GPU (Metal backend) or Metal-cpp; translation: Game Porting Toolkit / CrossOver." },
+  { id = "dx.d3d10-h", api = "Direct3D 10", re = '#\s*include\s*[<"](?i:d3d10(_1)?\.h|d3dx10\w*\.h)[>"]', msg = "Direct3D 10 renderer." },
+  { id = "dx.d3d11-h", api = "Direct3D 11", re = '#\s*include\s*[<"](?i:d3d11(_\d)?\.h)[>"]', msg = "Direct3D 11 renderer.", macos = "SDL_GPU (Metal backend), Metal-cpp, or Vulkan + MoltenVK; translation: GPTK D3DMetal supports D3D11.", linux = "SDL_GPU / Vulkan; translation: DXVK (d3d11 → Vulkan).", freebsd = "SDL_GPU / Vulkan on drm-kmod; translation: DXVK under Wine." },
+  { id = "dx.d3d12-h", api = "Direct3D 12", re = '#\s*include\s*[<"](?i:d3d12\w*\.h|d3dx12\.h|directx/d3dx12\.h)[>"]', msg = "Direct3D 12 renderer.", macos = "Metal-cpp or SDL_GPU (closest explicit API: Metal 3); translation: GPTK D3DMetal supports D3D12.", linux = "Vulkan (closest model to D3D12) or SDL_GPU; translation: VKD3D-Proton.", freebsd = "Vulkan / SDL_GPU; translation: VKD3D-Proton under Wine." },
+  { id = "dx.dxgi-h", api = "DXGI", re = '#\s*include\s*[<"](?i:dxgi\d?_?\d?\.h)[>"]', msg = "DXGI swap chain / adapter enumeration.", sev = "high", fix = "SDL_GPU swapchains (SDL_ClaimWindowForGPUDevice) or VkSwapchainKHR / CAMetalLayer." },
+  { id = "dx.d3dcompiler", api = "D3DCompile", re = '#\s*include\s*[<"](?i:d3dcompiler\.h|dxcapi\.h)[>"]|\bD3DCompile(FromFile)?\s*\(|\bD3DReflect\s*\(', msg = "Runtime HLSL compilation (d3dcompiler/DXC).", sev = "high", fix = "Precompile shaders offline: DXC → SPIR-V (Vulkan) and SPIRV-Cross / SDL_shadercross → MSL (Metal); ship per-backend blobs." },
+  { id = "dx.d3d11-device", api = "D3D11CreateDevice", re = '\bD3D11CreateDevice(AndSwapChain)?\s*\(', msg = "Creates the D3D11 device.", fix = "SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_DXIL, ...)." },
+  { id = "dx.d3d12-device", api = "D3D12CreateDevice", re = '\bD3D12(CreateDevice|GetDebugInterface|SerializeRootSignature)\s*\(', msg = "Creates the D3D12 device / root signatures.", fix = "vkCreateDevice (Vulkan) / MTLCreateSystemDefaultDevice (Metal) / SDL_CreateGPUDevice." },
+  { id = "dx.d3d9-create", api = "Direct3DCreate9", re = '\bDirect3DCreate9(Ex)?\s*\(', msg = "Creates the D3D9 interface.", fix = "SDL_CreateRenderer (2D) or SDL_CreateGPUDevice / OpenGL context (3D)." },
+  { id = "dx.interfaces", api = "ID3D11*/ID3D12*", re = '\bID3D1[0-2]\w+|\bIDirect3D(Device)?9\w*|\bIDXGI\w+', msg = "Uses Direct3D/DXGI COM interfaces.", once = true, fix = "Hide behind a renderer interface; map buffers/textures/pipelines to SDL_GPUBuffer / SDL_GPUTexture / SDL_GPUGraphicsPipeline." },
+  { id = "dx.createswapchain", api = "CreateSwapChain", re = '\bCreateSwapChain(ForHwnd|ForCoreWindow)?\s*\(|\bCreateDXGIFactory[12]?\s*\(', msg = "DXGI swap chain creation.", sev = "high", fix = "SDL_ClaimWindowForGPUDevice + SDL_AcquireGPUSwapchainTexture, or vkCreateSwapchainKHR / CAMetalLayer nextDrawable." },
+  { id = "dx.present", api = "IDXGISwapChain::Present", re = '->\s*Present1?\s*\(\s*\d', msg = "Presents a DXGI swap chain.", sev = "high", fix = "SDL_SubmitGPUCommandBuffer (presents acquired swapchain texture) / vkQueuePresentKHR / [commandBuffer presentDrawable:]." },
+  { id = "dx.d3dx-math", api = "D3DX/XMMath", re = '#\s*include\s*[<"](?i:directxmath\.h|xnamath\.h|d3dx\w*math\.h)[>"]|\bXMMATRIX\b|\bXMFLOAT[234](X[34])?\b|\bD3DXMATRIX\b', msg = "DirectXMath / D3DX math types.", sev = "medium", once = true, fix = "Use GLM, HandmadeMath, or cglm; DirectXMath itself is header-only and builds with GCC/Clang (watch row-major vs column-major and clip-space z [0,1])." },
+  { id = "dx.directxtk", api = "DirectXTK", re = '#\s*include\s*[<"](?i:SpriteBatch\.h|SpriteFont\.h|WICTextureLoader\.h|DDSTextureLoader\.h|SimpleMath\.h|GeometricPrimitive\.h)[>"]', msg = "DirectX Tool Kit helpers.", sev = "high", fix = "stb_image / KTX-Software for textures, SDL_ttf / msdfgen for fonts, GLM for math." },
+  { id = "dx.direct2d", api = "Direct2D/DirectWrite", re = '#\s*include\s*[<"](?i:d2d1\w*\.h|dwrite\w*\.h|wincodec\.h)[>"]|\bID2D1\w+|\bIDWrite\w+', msg = "Direct2D / DirectWrite / WIC.", sev = "high", once = true, fix = "Use Skia, Cairo, Blend2D, or NanoVG for 2D; FreeType + HarfBuzz for text; stb_image for decoding." },
+  { id = "dx.wgl", api = "WGL", re = '\bwgl(CreateContext|MakeCurrent|GetProcAddress|DeleteContext|SwapIntervalEXT|ChoosePixelFormatARB|CreateContextAttribsARB)\b|\b(ChoosePixelFormat|SetPixelFormat|SwapBuffers)\s*\(', msg = "OpenGL context creation via WGL.", sev = "high", fix = "Create the GL context with SDL3 (SDL_GL_CreateContext) or GLFW; load functions with glad / SDL_GL_GetProcAddress.", macos = "OpenGL is deprecated on macOS (max 4.1): prefer SDL_GPU/Metal; otherwise SDL_GL_CreateContext with a 4.1 core profile." },
+  { id = "dx.dxguid", api = "dxguid", re = '\b(IID_ID3D|IID_IDXGI|__uuidof\s*\(\s*ID3D)', msg = "DirectX interface GUIDs.", sev = "medium", once = true },
+  { id = "dx.pix", api = "PIX", re = '#\s*include\s*[<"](?i:pix3\.h|pix\.h)[>"]|\bPIXBeginEvent\s*\(', msg = "PIX GPU markers.", sev = "low", fix = "Use SDL_PushGPUDebugGroup, VK_EXT_debug_utils labels, or MTLCommandBuffer pushDebugGroup; RenderDoc for capture." },
+  { id = "dx.nvapi", api = "NVAPI/AGS", re = '#\s*include\s*[<"](?i:nvapi\.h|amd_ags\.h)[>"]', msg = "Vendor-specific Windows GPU extensions.", sev = "medium", fix = "Make optional; Vulkan exposes most features as extensions." },
+]
+
+# --- input ---------------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "input"
+sev = "high"
+fix = "Use the SDL3 gamepad API (SDL_OpenGamepad, SDL_GetGamepadAxis/Button) — it covers XInput, DualSense, Switch controllers, GameController.framework and evdev."
+rules = [
+  { id = "dx.xinput-h", api = "XInput", re = '#\s*include\s*[<"](?i:xinput\.h)[>"]', msg = "XInput gamepad header." },
+  { id = "dx.xinput-call", api = "XInputGetState", re = '\bXInput(GetState|SetState|GetCapabilities|Enable|GetBatteryInformation)\s*\(', msg = "Polls XInput controllers." },
+  { id = "dx.xinput-consts", api = "XINPUT_GAMEPAD_*", re = '\bXINPUT_GAMEPAD_\w+|\bXUSER_MAX_COUNT\b', msg = "XInput button/axis constants.", sev = "medium", once = true, fix = "Map to SDL_GAMEPAD_BUTTON_* / SDL_GAMEPAD_AXIS_*." },
+  { id = "dx.dinput-h", api = "DirectInput", re = '#\s*include\s*[<"](?i:dinput\.h)[>"]|\bDirectInput8Create\s*\(|\bIDirectInputDevice8\w*', msg = "DirectInput 8 devices.", fix = "SDL3 joystick/gamepad API (SDL_OpenJoystick) or GLFW joystick API." },
+  { id = "dx.dinput-keys", api = "DIK_*", re = '\bDIK_[A-Z0-9_]+\b', msg = "DirectInput key codes.", sev = "medium", once = true, fix = "Map to SDL_Scancode values." },
+  { id = "dx.forcefeedback", api = "Force feedback", re = '\bIDirectInputEffect\w*|\bXINPUT_VIBRATION\b', msg = "Rumble / force feedback.", sev = "medium", fix = "SDL_RumbleGamepad / SDL_RumbleGamepadTriggers; SDL haptic API for wheels." },
+  { id = "dx.hid", api = "Windows HID", re = '#\s*include\s*[<"](?i:hidsdi\.h|hidpi\.h|setupapi\.h)[>"]|\bHidD_\w+\s*\(|\bSetupDiGetClassDevs[AW]?\s*\(', msg = "Win32 HID / SetupAPI device access.", fix = "Use hidapi (Windows/macOS/Linux/FreeBSD) or SDL_hid_* in SDL3." },
+]
+
+# --- audio ---------------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "audio"
+sev = "blocker"
+fix = "Use miniaudio (single header: WASAPI/CoreAudio/ALSA/PulseAudio/PipeWire/OSS/sndio) or SDL3 audio streams; FMOD/Wwise/OpenAL Soft also run on all four targets."
+rules = [
+  { id = "dx.dsound", api = "DirectSound", re = '#\s*include\s*[<"](?i:dsound\.h)[>"]|\bDirectSound(Create8?|CaptureCreate8?)\s*\(|\bIDirectSound(Buffer)?8?\b', msg = "DirectSound playback." },
+  { id = "dx.xaudio2", api = "XAudio2", re = '#\s*include\s*[<"](?i:xaudio2\w*\.h|x3daudio\.h|xapofx\.h)[>"]|\bXAudio2Create\s*\(|\bIXAudio2\w*', msg = "XAudio2 audio engine.", linux = "miniaudio / SDL3 audio; FAudio is a drop-in XAudio2 reimplementation (used by FNA/Proton).", freebsd = "miniaudio (OSS/sndio backends) or FAudio over SDL3.", macos = "miniaudio / SDL3 (CoreAudio); FAudio works on macOS too." },
+  { id = "dx.wasapi", api = "WASAPI", re = '#\s*include\s*[<"](?i:audioclient\.h|mmdeviceapi\.h|audiopolicy\.h|endpointvolume\.h)[>"]|\bIAudioClient\d?\b|\bIMMDeviceEnumerator\b|\bIAudioRenderClient\b', msg = "WASAPI / Core Audio (Windows) endpoints." },
+  { id = "dx.waveout", api = "waveOut", re = '\bwave(Out|In)(Open|Write|PrepareHeader|Close|Reset|GetDevCaps)\w*\s*\(', msg = "winmm waveOut/waveIn audio." },
+  { id = "dx.playsound", api = "PlaySound", re = '\b(PlaySound|sndPlaySound)[AW]?\s*\(', msg = "winmm PlaySound one-shot playback.", sev = "high", fix = "miniaudio ma_engine_play_sound() is the one-line replacement." },
+  { id = "dx.midi", api = "midiOut", re = '\bmidi(Out|In)(Open|ShortMsg|LongMsg|Close|GetDevCaps)\w*\s*\(', msg = "winmm MIDI.", sev = "high", fix = "Use RtMidi or libremidi (CoreMIDI / ALSA seq / JACK / WinMM); TinySoundFont for synthesis." },
+  { id = "dx.mediafoundation", api = "Media Foundation", re = '#\s*include\s*[<"](?i:mfapi\.h|mfidl\.h|mfreadwrite\.h|mfplay\.h)[>"]|\bMFStartup\s*\(|\bMFCreate\w+\s*\(', msg = "Media Foundation (video/audio decoding).", fix = "Use FFmpeg (libavcodec/libavformat), GStreamer, or pl_mpeg / dr_libs for simple formats; AVFoundation on macOS." },
+  { id = "dx.directshow", api = "DirectShow", re = '#\s*include\s*[<"](?i:dshow\.h|strmif\.h)[>"]|\bIGraphBuilder\b', msg = "DirectShow media graphs.", fix = "Use FFmpeg or GStreamer; libVLC for playback." },
+  { id = "dx.xact", api = "XACT", re = '#\s*include\s*[<"](?i:xact3?\.h)[>"]', msg = "XACT audio (deprecated).", fix = "FAudio implements XACT3 on all platforms; otherwise move to FMOD/miniaudio." },
+]
+
+# --- shader sources ---------------------------------------------------------------
+[[group]]
+lang = ["hlsl"]
+os = ["windows"]
+cat = "graphics"
+sev = "medium"
+fix = "Cross-compile HLSL with DXC to SPIR-V (-spirv) and SPIRV-Cross / SDL_shadercross to MSL; Slang is another single-source option."
+rules = [
+  { id = "hlsl.file", api = "HLSL", re = '\S', once = true, msg = "HLSL shader source (D3D only as-is).", macos = "Convert via DXC → SPIR-V → SPIRV-Cross → MSL, or Apple's Metal Shader Converter (DXIL → metallib).", linux = "Compile with DXC -spirv for Vulkan/SDL_GPU; DXVK/VKD3D handle it in translation mode.", freebsd = "Compile with DXC -spirv for Vulkan/SDL_GPU." },
+  { id = "hlsl.register", api = "register(b0)", re = ':\s*register\s*\(\s*[btsu]\d+', msg = "Explicit D3D register bindings.", sev = "low", once = true, fix = "Use [[vk::binding(n, set)]] or SDL_GPU binding conventions (set/space per resource type)." },
+  { id = "hlsl.sm-intrinsics", api = "HLSL intrinsics", re = '\b(mul|saturate|lerp|frac|ddx|ddy|clip|tex2D|tex2Dlod)\s*\(', msg = "HLSL-specific intrinsics (differ from GLSL/MSL names).", sev = "info", once = true, fix = "Fine when cross-compiling with DXC/SPIRV-Cross; only matters when hand-porting to GLSL/MSL." },
+  { id = "hlsl.effects", api = "FX framework", re = '\btechnique1[01]?\b|\bpass\s+\w+\s*\{|\bSetVertexShader\s*\(', msg = "D3DX Effects (.fx) framework syntax.", sev = "high", fix = "Split into separate vertex/pixel entry points; build pipeline state in code." },
+  { id = "hlsl.shaderlab", api = "ShaderLab CGPROGRAM", re = '\bCGPROGRAM\b|\bHLSLPROGRAM\b', msg = "Unity ShaderLab (cross-compiled by Unity).", sev = "info", fix = "Unity handles per-platform compilation; check #pragma only_renderers / exclude_renderers." },
+]
+
+[[group]]
+lang = ["glsl"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "graphics"
+sev = "low"
+fix = "GLSL is portable across GL/Vulkan; on macOS cross-compile to MSL with SPIRV-Cross (OpenGL is deprecated there)."
+rules = [
+  { id = "glsl.version", api = "#version", re = '^\s*#\s*version\s+(1[0-5]0|[34][0-6]0)(\s+core|\s+compatibility)?', msg = "Desktop GLSL version directive.", once = true, macos = "macOS caps OpenGL at 4.1 core (GLSL 410) and deprecates it; translate to MSL via glslang + SPIRV-Cross for Metal/SDL_GPU." },
+  { id = "glsl.compat-builtins", api = "gl_FragColor", re = '\b(gl_FragColor|gl_FragData|texture2D|gl_ModelViewProjectionMatrix|gl_Vertex)\b', msg = "Deprecated compatibility-profile GLSL built-ins (not in core profile / macOS).", sev = "medium", once = true, fix = "Use `out vec4 fragColor;`, texture(), and explicit uniform matrices." },
+]
+
+[[group]]
+lang = ["msl"]
+os = ["macos"]
+cat = "graphics"
+sev = "high"
+fix = "Keep for the Metal backend; author shaders once in HLSL/Slang/GLSL and generate MSL + SPIR-V + DXIL (SDL_shadercross), or hand-port to GLSL."
+rules = [
+  { id = "msl.file", api = "Metal Shading Language", re = '\S', once = true, msg = "Metal shader source (Apple-only)." },
+]
+
+[[group]]
+lang = ["wgsl"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "graphics"
+sev = "info"
+fix = "WGSL runs anywhere wgpu/Dawn runs (D3D12, Metal, Vulkan, GL)."
+rules = [
+  { id = "wgsl.file", api = "WGSL", re = '\S', once = true, msg = "WebGPU shader source (portable through wgpu/Dawn)." },
+]
+
+# --- cross-platform graphics APIs with per-OS caveats ---------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "graphics"
+sev = "low"
+fix = "Portable API; make sure the per-OS context/surface creation goes through SDL3/GLFW."
+rules = [
+  { id = "gl.include", api = "OpenGL", re = '#\s*include\s*[<"](GL/gl\.h|GL/glu\.h|OpenGL/gl3?\.h|GL/glew\.h|glad/gl\.h|glad/glad\.h|GLES\d/gl\d?\.h)[>"]', msg = "OpenGL renderer (portable, but headers and loaders differ per OS).", once = true, macos = "OpenGL is deprecated on macOS (4.1 core max, no compute): plan an SDL_GPU/Metal backend or use ANGLE / MoltenVK+Zink.", windows = "Use glad/GLEW for >1.1 entry points; GL drivers vary on Windows, ANGLE is an alternative.", linux = "Mesa provides GL 4.6; create contexts via SDL3/GLFW (works on X11 and Wayland/EGL).", freebsd = "Mesa via drm-kmod provides GL 4.6; create contexts via SDL3/GLFW." },
+  { id = "gl.apple-header", api = "OpenGL/gl.h", re = '#\s*include\s*[<"]OpenGL/(gl|gl3|glu|OpenGL)\.h[>"]', msg = "Apple-only OpenGL framework header path.", sev = "medium", os = ["macos"], fix = "Use glad (generated loader) or <SDL3/SDL_opengl.h> so the include path is the same on all OSes." },
+  { id = "gl.legacy", api = "Fixed-function GL", re = '\bgl(Begin|End|Vertex[234][fdi]|MatrixMode|LoadIdentity|PushMatrix|PopMatrix|Ortho|Frustum|Color[34][fbu])\s*\(', msg = "Legacy fixed-function OpenGL (unavailable in core profiles and on macOS core contexts).", sev = "medium", once = true, fix = "Move to VBO/VAO + shaders (GL 3.3 core) or SDL_Renderer for 2D." },
+  { id = "vk.include", api = "Vulkan", re = '#\s*include\s*[<"](vulkan/vulkan(_core|_raii)?\.h(pp)?|volk\.h)[>"]', msg = "Vulkan renderer.", once = true, macos = "Use MoltenVK via the Vulkan SDK (enable VK_KHR_portability_enumeration + portability_subset) or KosmicKrisp; or add a Metal backend.", freebsd = "Vulkan works with drm-kmod + Mesa (RADV/ANV); install vulkan-loader from pkg.", linux = "Native (Mesa RADV/ANV/NVK or vendor drivers).", windows = "Native via the Vulkan loader." },
+  { id = "vk.win32-surface", api = "vkCreateWin32SurfaceKHR", re = '\bvkCreateWin32SurfaceKHR\b|\bVK_KHR_win32_surface\b|VK_USE_PLATFORM_WIN32_KHR', msg = "Windows-specific Vulkan surface.", os = ["windows"], sev = "medium", fix = "Create the surface with SDL_Vulkan_CreateSurface / glfwCreateWindowSurface." },
+  { id = "vk.xlib-surface", api = "vkCreateXlibSurfaceKHR", re = '\bvkCreate(Xlib|Xcb|Wayland)SurfaceKHR\b|VK_USE_PLATFORM_(XLIB|XCB|WAYLAND)_KHR', msg = "X11/Wayland-specific Vulkan surface.", os = ["linux", "freebsd"], sev = "medium", fix = "Create the surface with SDL_Vulkan_CreateSurface / glfwCreateWindowSurface." },
+  { id = "vk.metal-surface", api = "vkCreateMetalSurfaceEXT", re = '\bvkCreate(Metal|MacOS)Surface(EXT|MVK)\b|VK_USE_PLATFORM_(METAL_EXT|MACOS_MVK)', msg = "macOS-specific Vulkan surface (MoltenVK).", os = ["macos"], sev = "medium", fix = "Create the surface with SDL_Vulkan_CreateSurface / glfwCreateWindowSurface." },
+  { id = "gl.glx", api = "GLX", re = '\bglX(CreateContext|MakeCurrent|SwapBuffers|ChooseVisual|ChooseFBConfig|GetProcAddress(ARB)?|CreateContextAttribsARB)\b|#\s*include\s*[<"]GL/glx\.h[>"]', msg = "OpenGL context via GLX (X11 only, no Wayland).", os = ["linux", "freebsd"], sev = "high", fix = "SDL_GL_CreateContext / GLFW handle GLX, EGL (Wayland), WGL and CGL." },
+  { id = "gl.egl", api = "EGL", re = '\begl(GetDisplay|Initialize|CreateContext|CreateWindowSurface|SwapBuffers|MakeCurrent)\b', msg = "EGL context creation.", os = ["linux", "freebsd"], sev = "medium", fix = "Fine on Linux/FreeBSD (and via ANGLE elsewhere); SDL3/GLFW hide it." },
+  { id = "gl.cgl", api = "CGL/NSOpenGL", re = '\bCGL(ChoosePixelFormat|CreateContext|SetCurrentContext|FlushDrawable)\b|\bNSOpenGL(Context|View|PixelFormat)\b', msg = "macOS OpenGL context (deprecated since 10.14).", os = ["macos"], sev = "high", fix = "SDL_GL_CreateContext / GLFW, and plan a Metal / SDL_GPU backend." },
+  { id = "gfx.bgfx", api = "bgfx", re = '#\s*include\s*[<"]bgfx/bgfx\.h[>"]', msg = "bgfx renderer (portable).", sev = "info", once = true },
+  { id = "gfx.webgpu", api = "WebGPU", re = '#\s*include\s*[<"](webgpu/webgpu(_cpp)?\.h|dawn/\w+\.h|wgpu\.h)[>"]', msg = "WebGPU renderer (portable via Dawn/wgpu-native).", sev = "info", once = true },
+  { id = "gfx.sdl-gpu", api = "SDL_GPU", re = '\bSDL_CreateGPUDevice\s*\(', msg = "SDL_GPU renderer (portable: Vulkan, Metal, D3D12).", sev = "info", once = true },
+]

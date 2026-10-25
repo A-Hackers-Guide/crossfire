@@ -1,0 +1,107 @@
+# Game engines and cross-platform frameworks: mostly portable, with
+# platform-conditional code paths and Windows-only plugins worth reviewing.
+
+# --- Unity (C#) -------------------------------------------------------------------
+[[group]]
+lang = ["csharp"]
+os = ["windows"]
+cat = "other"
+sev = "medium"
+fix = "Unity builds for Windows/macOS/Linux from one project: add the missing #if branches / plugin variants and switch build target. FreeBSD is not a Unity target (Linux build may run via the Linuxulator)."
+rules = [
+  { id = "unity.define-win", api = "#if UNITY_STANDALONE_WIN", re = '#\s*(el)?if\b.*\bUNITY_(STANDALONE_WIN|EDITOR_WIN|WSA|XBOXONE|GAMECORE)\b', msg = "Windows-specific Unity compilation branch.", not = 'UNITY_STANDALONE_(OSX|LINUX)' },
+  { id = "unity.runtimeplatform", api = "Application.platform", re = '\bRuntimePlatform\.(WindowsPlayer|WindowsEditor)\b', msg = "Runtime check for Windows players.", sev = "low" },
+  { id = "unity.xinputdotnet", api = "XInputDotNet", re = '\busing\s+XInputDotNetPure\b', msg = "XInputDotNet plugin (Windows-only native DLL).", cat = "input", sev = "high", fix = "Use Unity's Input System package (Gamepad.current), which supports all desktop players." },
+  { id = "unity.win-paths", api = "Windows paths in Unity", re = '"(C:|D:)\\\\|Application\.dataPath\s*\+\s*"\\\\', msg = "Windows path concatenation in Unity scripts.", cat = "filesystem", fix = "Use Path.Combine(Application.persistentDataPath/streamingAssetsPath, ...)." },
+  { id = "unity.directx-only-api", api = "D3D-only rendering calls", re = '\bSystemInfo\.graphicsDeviceType\s*==\s*GraphicsDeviceType\.Direct3D1[12]\b|\bGL\.IssuePluginEvent\b', msg = "Rendering code assuming Direct3D.", cat = "graphics", sev = "high", fix = "Handle Metal (macOS) and Vulkan/OpenGLCore (Linux) device types too." },
+]
+
+[[group]]
+lang = ["csharp"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "other"
+sev = "info"
+fix = "Verify each platform has a branch."
+rules = [
+  { id = "unity.platform-check", api = "Application.platform", re = '\bApplication\.platform\b', msg = "Unity runtime platform check.", once = true },
+  { id = "xna.framework", api = "XNA / MonoGame", re = '\busing\s+Microsoft\.Xna\.Framework\b', msg = "XNA-style API (MonoGame/FNA): portable when using the DesktopGL / FNA backends.", sev = "low", fix = "Use MonoGame DesktopGL (or FNA + FNA3D/SDL3) instead of the WindowsDX backend; content pipeline output is shared." },
+  { id = "avalonia.ui", api = "Avalonia", re = '\busing\s+Avalonia\b', msg = "Avalonia UI (portable).", once = true },
+  { id = "maui.ui", api = ".NET MAUI", re = '\busing\s+Microsoft\.Maui\b', msg = ".NET MAUI (Windows + macOS via Catalyst; no Linux/FreeBSD desktop).", sev = "medium", fix = "For Linux/FreeBSD desktop support, consider Avalonia (or the community Maui.Gtk backend)." },
+  { id = "godot.csharp", api = "Godot C#", re = '\busing\s+Godot\s*;', msg = "Godot .NET scripts (export templates for Windows/macOS/Linux; FreeBSD unofficial).", once = true },
+  { id = "cs.runtimeinformation", api = "RuntimeInformation", re = '\bRuntimeInformation\.IsOSPlatform\b|\bOperatingSystem\.Is(Windows|MacOS|Linux|FreeBSD)\s*\(', msg = "Runtime OS check — ensure all branches exist.", once = true },
+]
+
+# --- Unreal (C++) --------------------------------------------------------------------
+[[group]]
+lang = ["cpp"]
+os = ["windows"]
+cat = "other"
+sev = "medium"
+fix = "Unreal is cross-platform: replace Windows-only includes with FPlatform* abstractions and test the Mac/Linux targets (FreeBSD unsupported)."
+rules = [
+  { id = "ue.allow-windows-types", api = "AllowWindowsPlatformTypes.h", re = '#\s*include\s*"Windows/(AllowWindowsPlatformTypes|HideWindowsPlatformTypes|WindowsHWrapper|MinWindows)\.h"', msg = "Pulls raw Windows headers into Unreal code.", sev = "high" },
+  { id = "ue.platform-windows", api = "PLATFORM_WINDOWS", re = '#\s*if\b.*\bPLATFORM_WINDOWS\b', msg = "Windows-only Unreal code path.", not = 'PLATFORM_(MAC|LINUX|APPLE|UNIX)' },
+  { id = "ue.d3d-rhi", api = "D3D RHI", re = '#\s*include\s*"(D3D11RHI|D3D12RHI|D3D11RHIPrivate|D3D12RHIPrivate)\w*\.h"|\bFD3D1[12]DynamicRHI\b', msg = "Direct access to the D3D RHI.", cat = "graphics", sev = "high", fix = "Use generic RHI calls (FRHICommandList) so Metal/Vulkan RHIs work." },
+]
+
+[[group]]
+lang = ["cpp"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "other"
+sev = "info"
+fix = "Portable engine abstraction."
+rules = [
+  { id = "ue.fplatformmisc", api = "FPlatformMisc", re = '\bFPlatform(Misc|Process|File|Time|Memory)::', msg = "Unreal platform abstraction (portable).", once = true },
+]
+
+# --- Godot / Love2D / Lua engines -----------------------------------------------------
+[[group]]
+lang = ["gdscript"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "other"
+sev = "info"
+fix = "Godot exports to Windows, macOS and Linux (and builds on FreeBSD from source); make sure each OS branch exists."
+rules = [
+  { id = "godot.os-name", api = "OS.get_name()", re = '\bOS\.(get_name|has_feature)\s*\(', msg = "Godot OS check.", once = true },
+  { id = "godot.os-execute", api = "OS.execute", re = '\bOS\.(execute|create_process|shell_open)\s*\(\s*"(cmd|cmd\.exe|powershell|explorer|notepad|open|xdg-open)"', msg = "Runs OS-specific commands.", sev = "medium", os = ["windows"], cat = "process", fix = "Use OS.shell_open(path) which is portable, or branch on OS.get_name()." },
+  { id = "godot.gdextension", api = "GDExtension", re = '\bGDExtension\b|\.gdextension\b', msg = "Native GDExtension: must be built per OS (dll/so/dylib/framework).", sev = "medium", cat = "dynamicLibrary", lang = ["gdscript", "godot", "manifest"] },
+  { id = "godot.win-path", api = "Windows path", re = '"[A-Za-z]:[\\/]', msg = "Absolute Windows path in GDScript.", sev = "high", cat = "filesystem", os = ["windows"], fix = "Use res:// and user:// paths." },
+  { id = "godot.renderer-d3d", api = "D3D12 renderer setting", re = 'rendering_device/driver(\.windows)?\s*=\s*"d3d12"', msg = "Project forces the D3D12 rendering driver.", lang = ["godot"], sev = "medium", cat = "graphics", os = ["windows"], fix = "Set driver per platform: vulkan (Linux/Windows), metal (macOS, Godot 4.4+)." },
+]
+
+[[group]]
+lang = ["lua"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "other"
+sev = "info"
+fix = "LÖVE runs on Windows, macOS, Linux and FreeBSD (pkg love); verify OS branches."
+rules = [
+  { id = "love.getos", api = "love.system.getOS", re = '\blove\.system\.getOS\s*\(', msg = "LÖVE OS check.", once = true },
+  { id = "love.ffi", api = "LuaJIT FFI", re = '''\brequire\s*\(?\s*["']ffi["']\s*\)?|\bffi\.(load|cdef)\s*\(''', msg = "LuaJIT FFI native calls (library names/ABIs per OS).", sev = "medium", cat = "dynamicLibrary", fix = "Guard ffi.load names by ffi.os (\"Windows\", \"OSX\", \"Linux\", \"BSD\")." },
+]
+
+# --- SDL / GLFW / raylib / frameworks (informational + migration hints) ---------------
+[[group]]
+lang = ["cfam"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "windowing"
+sev = "info"
+fix = "Portable layer — already a good fit for all four OSes."
+rules = [
+  { id = "fw.sdl2", api = "SDL2", re = '#\s*include\s*[<"](SDL2/SDL\.h|SDL\.h)[>"]', msg = "Uses SDL2.", sev = "low", once = true, fix = "SDL2 is portable; consider migrating to SDL3 (sdl2-compat exists; SDL_GPU, dialogs, tray, camera, process APIs)." },
+  { id = "fw.sdl3", api = "SDL3", re = '#\s*include\s*[<"]SDL3/SDL\.h[>"]', msg = "Uses SDL3.", once = true },
+  { id = "fw.glfw", api = "GLFW", re = '#\s*include\s*[<"]GLFW/glfw3\.h[>"]', msg = "Uses GLFW.", once = true },
+  { id = "fw.raylib", api = "raylib", re = '#\s*include\s*[<"]raylib\.h[>"]', msg = "Uses raylib.", once = true },
+  { id = "fw.sokol", api = "sokol", re = '#\s*include\s*[<"]sokol_(app|gfx|audio)\.h[>"]', msg = "Uses sokol headers (D3D11/Metal/GL backends selected by define).", once = true },
+  { id = "fw.sfml", api = "SFML", re = '#\s*include\s*[<"]SFML/\w+\.hpp[>"]', msg = "Uses SFML.", once = true },
+  { id = "fw.allegro", api = "Allegro", re = '#\s*include\s*[<"]allegro5/allegro\.h[>"]', msg = "Uses Allegro 5.", once = true },
+  { id = "fw.qt", api = "Qt", re = '#\s*include\s*[<"](Q[A-Z]\w+|Qt\w+/Q\w+)[>"]', msg = "Uses Qt (portable; deploy with windeployqt / macdeployqt / linuxdeployqt).", cat = "ui", once = true },
+  { id = "fw.wx", api = "wxWidgets", re = '#\s*include\s*[<"]wx/\w+\.h[>"]', msg = "Uses wxWidgets (native widgets on each OS).", cat = "ui", once = true },
+  { id = "fw.imgui", api = "Dear ImGui", re = '#\s*include\s*[<"](imgui\.h|imgui/imgui\.h)[>"]', msg = "Uses Dear ImGui.", cat = "ui", once = true },
+  { id = "fw.imgui-win-backend", api = "imgui_impl_win32/dx", re = '#\s*include\s*[<"](imgui_impl_(win32|dx9|dx10|dx11|dx12)\.h)[>"]', msg = "Dear ImGui Windows/DirectX backends.", sev = "high", os = ["windows"], cat = "graphics", fix = "Switch to imgui_impl_sdl3 + imgui_impl_sdlgpu3 (or imgui_impl_glfw + imgui_impl_vulkan / imgui_impl_opengl3)." },
+  { id = "fw.imgui-mac-backend", api = "imgui_impl_osx/metal", re = '#\s*include\s*[<"](imgui_impl_(osx|metal)\.h)[>"]', msg = "Dear ImGui macOS/Metal backends.", sev = "high", os = ["macos"], cat = "graphics", fix = "Switch to imgui_impl_sdl3 + imgui_impl_sdlgpu3 (or glfw + vulkan)." },
+  { id = "fw.qt-windows-extras", api = "QtWin / ActiveQt", re = '\b(QtWin|QWinTaskbarButton|QWinJumpList|QAxObject|QAxWidget)\b|#\s*include\s*[<"]Q(Ax|Win)\w+[>"]', msg = "Qt Windows-only modules (WinExtras / ActiveQt).", sev = "high", os = ["windows"], cat = "ui", fix = "Remove or guard with Q_OS_WIN; WinExtras is gone in Qt 6." },
+  { id = "fw.qt-mac-extras", api = "QtMac", re = '\b(QMacToolBar|QMacNativeWidget|QtMac::)\b', msg = "Qt macOS-only extras.", sev = "medium", os = ["macos"], cat = "ui", fix = "Guard with Q_OS_MACOS." },
+  { id = "fw.fmod", api = "FMOD/Wwise", re = '#\s*include\s*[<"](fmod(_studio)?\.hpp?|AK/SoundEngine/Common/\w+\.h)[>"]', msg = "FMOD / Wwise middleware (portable, per-OS binaries/licensing).", cat = "audio", once = true, sev = "low", fix = "Ship the per-OS runtime libraries; FreeBSD is not an official FMOD/Wwise target." },
+  { id = "fw.steam", api = "Steamworks", re = '#\s*include\s*[<"](steam/steam_api\.h|steam_api\.h)[>"]', msg = "Steamworks SDK (Windows/macOS/Linux libraries; no FreeBSD).", cat = "other", once = true, sev = "low", fix = "Ship steam_api64.dll / libsteam_api.dylib / libsteam_api.so; stub it out on FreeBSD." },
+]

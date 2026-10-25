@@ -1,0 +1,280 @@
+# Language-level platform ties: C#/.NET, Python, Go, Rust, Java/Kotlin,
+# JavaScript/TypeScript (Node/Electron), Lua.
+
+# --- C# / .NET ------------------------------------------------------------------
+[[group]]
+lang = ["dotnet"]
+os = ["windows"]
+cat = "ui"
+sev = "blocker"
+fix = "Port the UI to Avalonia UI (closest to WPF, runs on Windows/macOS/Linux/FreeBSD) or .NET MAUI (Windows/macOS only); Uno Platform is another option."
+rules = [
+  { id = "cs.winforms", api = "WinForms", re = '\busing\s+System\.Windows\.Forms\b|\bSystem\.Windows\.Forms\.\w+|\bApplication\.(Run|EnableVisualStyles|SetCompatibleTextRenderingDefault)\s*\(', msg = "Windows Forms UI (runs only on Windows in .NET 5+).", linux = "Avalonia (or Eto.Forms for a WinForms-like API); Mono's WinForms is unmaintained.", freebsd = "Avalonia (community-supported on FreeBSD) or Eto.Forms/GTK.", macos = "Avalonia, Eto.Forms (Cocoa backend) or .NET MAUI (Mac Catalyst)." },
+  { id = "cs.winforms-controls", api = "WinForms controls", re = '\b(Form|Button|Label|TextBox|ListBox|ComboBox|DataGridView|MenuStrip|ToolStrip|Timer|PictureBox|Panel|MessageBox|OpenFileDialog|SaveFileDialog)\b\s*(\(|\.Show|\s+\w+\s*=\s*new)', msg = "WinForms controls / dialogs.", sev = "high", once = true, fix = "Map controls to Avalonia equivalents (Window, Button, TextBlock, TextBox, ListBox, ComboBox, DataGrid, Menu) and dialogs to StorageProvider APIs." },
+  { id = "cs.wpf", api = "WPF", re = '\busing\s+System\.Windows(\.Controls|\.Media|\.Shapes|\.Input|\.Threading|\.Data|\.Markup)?\s*;|\bSystem\.Windows\.Application\b', msg = "WPF (Windows Presentation Foundation).", fix = "Avalonia UI (XAML dialect close to WPF; most MVVM code ports directly)." },
+  { id = "cs.wpf-xaml", api = "WPF XAML", re = 'xmlns="http://schemas\.microsoft\.com/winfx/2006/xaml/presentation"', msg = "WPF XAML markup.", lang = ["xaml"], once = true, fix = "Convert to Avalonia XAML (xmlns=\"https://github.com/avaloniaui\"), adjusting styles/triggers." },
+  { id = "cs.uwp", api = "UWP/WinUI", re = '\busing\s+(Windows\.UI\.Xaml|Microsoft\.UI\.Xaml|Windows\.ApplicationModel|Windows\.Storage)\b', msg = "UWP / WinUI 3 (Windows-only).", fix = "Uno Platform (WinUI API on macOS/Linux) or Avalonia." },
+  { id = "cs.system-drawing", api = "System.Drawing", re = '\busing\s+System\.Drawing(\.Imaging|\.Drawing2D|\.Text)?\s*;|\bSystem\.Drawing\.(Bitmap|Graphics|Image)\b', msg = "System.Drawing.Common is Windows-only since .NET 6.", sev = "high", cat = "graphics", fix = "SkiaSharp, ImageSharp (SixLabors) or Microsoft.Maui.Graphics." },
+  { id = "cs.winforms-xaml-dialogs", api = "Microsoft.Win32 dialogs", re = '\bMicrosoft\.Win32\.(OpenFileDialog|SaveFileDialog)\b', msg = "WPF file dialogs.", sev = "high", fix = "Avalonia StorageProvider.OpenFilePickerAsync." },
+]
+
+[[group]]
+lang = ["dotnet"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Use cross-platform .NET APIs; guard Windows-only code with OperatingSystem.IsWindows() and [SupportedOSPlatform(\"windows\")] (CA1416 analyzer)."
+rules = [
+  { id = "cs.dllimport-win", api = "DllImport user32/kernel32", re = '\[\s*(DllImport|LibraryImport)\s*\(\s*"(user32|kernel32|gdi32|shell32|advapi32|ole32|winmm|comctl32|dwmapi|ntdll|shlwapi|uxtheme|winspool\.drv|psapi|dbghelp|setupapi|hid|xinput1_[34]|d3d\d+)(\.dll)?"', msg = "P/Invoke into Windows system DLLs.", sev = "blocker", fix = "Replace with managed APIs or per-OS native calls (libc via [LibraryImport(\"libc\")], CoreFoundation/AppKit via ObjCRuntime), guarded by OperatingSystem.IsWindows()." },
+  { id = "cs.dllimport", api = "DllImport", re = '\[\s*(DllImport|LibraryImport)\s*\(', msg = "P/Invoke native interop: the native library must exist for every target RID.", sev = "medium", cat = "dynamicLibrary", not = '"(user32|kernel32|gdi32|shell32|advapi32|ole32|winmm|comctl32|dwmapi|ntdll|shlwapi|uxtheme|psapi|dbghelp|setupapi|hid|xinput|d3d)', fix = "Ship per-RID native assets under runtimes/<rid>/native and use NativeLibrary.SetDllImportResolver for name differences (.dll/.so/.dylib)." },
+  { id = "cs.registry", api = "Microsoft.Win32.Registry", re = '\bRegistry\.(CurrentUser|LocalMachine|ClassesRoot|GetValue|SetValue)\b|\bRegistryKey\b|\busing\s+Microsoft\.Win32\s*;', msg = "Windows registry access.", cat = "registry", fix = "Store settings in a JSON file under Environment.GetFolderPath(SpecialFolder.ApplicationData) (maps to ~/.config / ~/Library/Application Support) — see Crossfire/CfPlatform.cs CfSettings." },
+  { id = "cs.wmi", api = "System.Management", re = '\busing\s+System\.Management\s*;|\bManagementObjectSearcher\b', msg = "WMI queries (System.Management is Windows-only).", fix = "Use RuntimeInformation, Environment, DriveInfo, Process APIs or per-OS sources (/proc, sysctl)." },
+  { id = "cs.servicebase", api = "ServiceBase", re = '\bServiceBase\b|\busing\s+System\.ServiceProcess\s*;', msg = "Windows service host.", cat = "process", fix = "Microsoft.Extensions.Hosting with UseWindowsService()/UseSystemd(); launchd plist on macOS, rc.d on FreeBSD." },
+  { id = "cs.eventlog", api = "EventLog", re = '\bEventLog\.(WriteEntry|CreateEventSource)\b|\bnew\s+EventLog\s*\(', msg = "Windows Event Log.", sev = "medium", fix = "Microsoft.Extensions.Logging (console/systemd journal/OSLog providers) or Serilog." },
+  { id = "cs.com-interop", api = "COM interop", re = '\[\s*ComImport\s*\]|\bMarshal\.(GetActiveObject|ReleaseComObject)\b|\bType\.GetTypeFromProgID\s*\(', msg = "COM interop / Office automation.", sev = "blocker", fix = "Replace COM automation with file formats or cross-platform libraries (e.g. ClosedXML/OpenXML SDK instead of Excel interop)." },
+  { id = "cs.stathread", api = "[STAThread]", re = '\[\s*STAThread\s*\]', msg = "COM single-threaded apartment attribute (WinForms/WPF entry).", sev = "low", fix = "Harmless elsewhere; Avalonia uses its own dispatcher." },
+  { id = "cs.windows-paths", api = "Windows paths", re = '@"[A-Za-z]:\\|"[A-Za-z]:\\\\|Path\.Combine\s*\(\s*"[A-Za-z]:', msg = "Hard-coded Windows paths.", sev = "high", cat = "filesystem", fix = "Path.Combine with Environment.GetFolderPath / AppContext.BaseDirectory." },
+  { id = "cs.backslash-verbatim", api = "verbatim backslash path", re = '@"[\w.\-]+(\\[\w.\-]+)+"', msg = "Backslash path in a verbatim string.", sev = "low", cat = "filesystem", fix = "Use Path.Combine or forward slashes (auto-rewritten)." },
+  { id = "cs.process-windows-tools", api = "Process.Start(cmd/notepad)", re = 'Process\.Start\s*\(\s*(new\s+ProcessStartInfo\s*\(\s*)?"(cmd(\.exe)?|notepad(\.exe)?|explorer(\.exe)?|powershell(\.exe)?|regedit|taskkill|rundll32)', msg = "Launches Windows-only tools.", cat = "process", fix = "Use Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }) for documents/URLs; open/xdg-open via CfPlatform.OpenPath." },
+  { id = "cs.environment-osversion", api = "Environment.OSVersion", re = '\bEnvironment\.OSVersion\b|\bPlatformID\.Win32NT\b', msg = "OS checks via OSVersion/PlatformID.", sev = "low", fix = "Use OperatingSystem.IsWindows()/IsMacOS()/IsLinux()/IsFreeBSD()." },
+  { id = "cs.sharpdx", api = "SharpDX/Vortice", re = '\busing\s+(SharpDX|Vortice\.(Direct3D\d+|DXGI|XAudio2|XInput|DirectInput))\b', msg = "DirectX wrappers for .NET.", sev = "blocker", cat = "graphics", fix = "Silk.NET (Vulkan/OpenGL/OpenAL/SDL), Veldrid, or MonoGame/FNA for games." },
+  { id = "cs.naudio", api = "NAudio", re = '\busing\s+NAudio\b', msg = "NAudio (WASAPI/WinMM wrappers; output is Windows-only).", sev = "high", cat = "audio", fix = "OpenTK.Audio (OpenAL), Silk.NET.OpenAL, ManagedBass, or SDL3 via SDL3-CS." },
+  { id = "cs.wincred", api = "ProtectedData", re = '\bProtectedData\.(Protect|Unprotect)\b|\bDataProtectionScope\b', msg = "DPAPI (Windows-only).", sev = "high", fix = "Microsoft.AspNetCore.DataProtection, or OS keychains via a library like GitCredentialManager's secure storage." },
+  { id = "cs.clipboard-forms", api = "Clipboard (WinForms)", re = '\bClipboard\.(SetText|GetText|SetData|GetData)\s*\(', msg = "WinForms/WPF clipboard.", sev = "medium", cat = "ui", fix = "Avalonia TopLevel.Clipboard or TextCopy NuGet." },
+]
+
+[[group]]
+lang = ["msbuild"]
+os = ["windows"]
+cat = "build"
+sev = "medium"
+fix = "Retarget to net8.0 (or later) without the -windows suffix and set RuntimeIdentifiers for win-x64;osx-arm64;osx-x64;linux-x64."
+rules = [
+  { id = "msb.windows-tfm", api = "net*-windows TFM", re = '<TargetFrameworks?>[^<]*net\d+\.\d+-windows', msg = "Windows-specific target framework.", sev = "high" },
+  { id = "msb.netfx", api = ".NET Framework", re = '<TargetFrameworkVersion>v[234]\.\d|<TargetFrameworks?>[^<]*\bnet(4\d+|35|20)\b', msg = ".NET Framework target (Windows-only runtime).", sev = "high", fix = "Migrate to SDK-style net8.0 (use the .NET Upgrade Assistant)." },
+  { id = "msb.usewinforms", api = "UseWindowsForms", re = '<UseWindowsForms>\s*true', msg = "Project enables WinForms.", sev = "high" },
+  { id = "msb.usewpf", api = "UseWPF", re = '<UseWPF>\s*true', msg = "Project enables WPF.", sev = "high" },
+  { id = "msb.winexe", api = "OutputType WinExe", re = '<OutputType>\s*WinExe', msg = "GUI subsystem executable.", sev = "info", fix = "Fine for Avalonia too (suppresses the console window on Windows)." },
+  { id = "msb.vcxproj-toolset", api = "PlatformToolset", re = '<PlatformToolset>\s*(v1\d\d|ClangCL)', msg = "MSVC C++ project (Visual Studio only).", once = true, fix = "Generate CMakeLists.txt (Crossfire does) and keep the .vcxproj only for Windows developers if wanted." },
+  { id = "msb.additional-deps", api = "AdditionalDependencies", re = '<AdditionalDependencies>[^<]*(d3d\d+|dxgi|user32|gdi32|winmm|ws2_32|xinput|dsound|dinput8|ole32|shell32|comctl32)\.lib', msg = "Links Windows system import libraries.", sev = "high", fix = "Move into CMake: target_link_libraries(... $<$<PLATFORM_ID:Windows>:d3d11 dxgi ...>)." },
+  { id = "msb.subsystem", api = "SubSystem Windows", re = '<SubSystem>\s*Windows', msg = "Win32 GUI subsystem.", sev = "info", fix = "In CMake use add_executable(app WIN32 ...) on Windows and MACOSX_BUNDLE on macOS." },
+  { id = "msb.rid-windows", api = "RuntimeIdentifier win-*", re = '<RuntimeIdentifiers?>[^<]*\bwin(7|8|10)?-(x86|x64|arm64)\b[^;<]*<', msg = "Only Windows runtime identifiers.", sev = "low" },
+  { id = "msb.comreference", api = "COMReference", re = '<COMReference\b', msg = "COM type library reference.", sev = "blocker", cat = "other", fix = "Remove COM dependencies (see cs.com-interop)." },
+  { id = "msb.nuget-windows", api = "Windows-only NuGet", re = '<PackageReference\s+Include="(Microsoft\.Windows\.Compatibility|Microsoft\.WindowsAppSDK|Microsoft\.Web\.WebView2|SharpDX[\w.]*|NAudio[\w.]*|System\.Management|Microsoft\.Win32\.Registry|System\.Drawing\.Common|PInvoke\.\w+|Vanara\.\w+|TaskScheduler)"', msg = "Windows-only NuGet package.", sev = "high", cat = "build", fix = "See the dependency list for a portable alternative." },
+]
+
+# --- Python -----------------------------------------------------------------------
+[[group]]
+lang = ["python"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Use cross-platform modules (pathlib, platformdirs, subprocess, shutil, webbrowser) and guard Windows-only code with `if sys.platform == \"win32\":`."
+rules = [
+  { id = "py.winreg", api = "winreg", re = '^\s*(import\s+_?winreg\b|from\s+_?winreg\s+import)', msg = "Windows registry module.", cat = "registry", fix = "Rewritten to `from crossfire import cf_winreg as winreg` (JSON-file-backed outside Windows); idiomatic: a config file in platformdirs.user_config_dir()." },
+  { id = "py.winreg-calls", api = "winreg calls", re = '\b_?winreg\.(OpenKey|CreateKey|QueryValueEx|SetValueEx|DeleteValue|EnumKey|EnumValue|HKEY_\w+)', msg = "Registry reads/writes.", cat = "registry", sev = "medium", fix = "Handled by crossfire.cf_winreg for the common subset (OpenKey/CreateKey/QueryValueEx/SetValueEx/DeleteValue/CloseKey)." },
+  { id = "py.msvcrt", api = "msvcrt", re = '^\s*(import\s+msvcrt\b|from\s+msvcrt\s+import)|\bmsvcrt\.(getch|getwch|kbhit|locking|setmode)\s*\(', msg = "MSVC runtime console/file helpers.", cat = "input", sev = "medium", fix = "Rewritten to crossfire.cf_platform.getch()/kbhit() (termios/select on POSIX)." },
+  { id = "py.windll", api = "ctypes.windll", re = '\bctypes\.(windll|WinDLL|oledll|OleDLL|WINFUNCTYPE)\b|\bwindll\.(user32|kernel32|shell32|gdi32)\b', msg = "ctypes calls into Windows DLLs.", sev = "blocker", fix = "Find a portable module, or load per-OS libraries with ctypes.CDLL(ctypes.util.find_library(...))." },
+  { id = "py.pywin32", api = "pywin32", re = '^\s*(import|from)\s+(win32api|win32con|win32gui|win32process|win32file|win32com|win32clipboard|win32service|win32event|pythoncom|pywintypes|winerror)\b', msg = "pywin32 extension modules.", sev = "blocker", fix = "Replace with portable packages: pyperclip (clipboard), psutil (processes), pynput (input), plyer/notify-py (notifications)." },
+  { id = "py.startfile", api = "os.startfile", re = '\bos\.startfile\s*\(', msg = "os.startfile exists only on Windows.", cat = "process", sev = "medium", fix = "Rewritten to crossfire.cf_platform.open_path() (open on macOS, xdg-open on Linux/FreeBSD)." },
+  { id = "py.winsound", api = "winsound", re = '^\s*(import\s+winsound\b|from\s+winsound\s+import)', msg = "winsound (Windows-only audio).", cat = "audio", fix = "simpleaudio, pygame.mixer, sounddevice or playsound3." },
+  { id = "py.wmi", api = "wmi/comtypes", re = '^\s*(import|from)\s+(wmi|comtypes|win32com\.client)\b', msg = "WMI / COM automation from Python.", sev = "blocker", fix = "psutil for system info; openpyxl/python-docx instead of Office automation." },
+  { id = "py.cls", api = "os.system('cls')", re = '''os\.system\s*\(\s*['"](cls|pause|start |dir|del |copy |move |type |ipconfig|tasklist|taskkill)''', msg = "Shells out to cmd.exe built-ins.", cat = "process", sev = "medium", fix = "Use Python equivalents (shutil, os.listdir, print('\\033c'), input(...)) or subprocess with per-OS commands." },
+  { id = "py.appdata", api = "APPDATA env", re = '''os\.(environ\s*\[\s*|environ\.get\s*\(\s*|getenv\s*\(\s*)['"](APPDATA|LOCALAPPDATA|USERPROFILE|PROGRAMDATA|TEMP|USERNAME|COMPUTERNAME|PROGRAMFILES)['"]''', msg = "Windows-only environment variables.", cat = "filesystem", sev = "medium", fix = "Rewritten to crossfire.cf_platform.user_data_dir()/home_dir()/temp_dir() (platformdirs semantics)." },
+  { id = "py.windows-path", api = "Windows path literal", re = '''[rR]?['"][A-Za-z]:\\''', msg = "Hard-coded Windows drive path.", cat = "filesystem", fix = "Use pathlib.Path relative to __file__ or platformdirs." },
+  { id = "py.raw-backslash", api = "raw backslash path", re = '''\b[rR]['"][\w.\-]+(\\[\w.\-]+)+['"]''', msg = "Backslash path in a raw string.", cat = "filesystem", sev = "low", fix = "Use forward slashes or pathlib (auto-rewritten)." },
+  { id = "py.pyinstaller-win", api = "pyinstaller --icon .ico", re = '--icon[= ]\S+\.ico\b', msg = "Windows icon format for PyInstaller.", lang = ["python", "scripts"], cat = "packaging", sev = "low", fix = "Provide .icns for macOS and .png for Linux builds." },
+]
+
+[[group]]
+lang = ["python"]
+os = ["macos", "linux", "freebsd"]
+cat = "other"
+sev = "medium"
+fix = "Guard POSIX-only modules with `if os.name == \"posix\":` and provide Windows fallbacks (msvcrt, subprocess, threading)."
+rules = [
+  { id = "py.posix-modules", api = "fcntl/termios/pwd/grp/resource", re = '^\s*(import|from)\s+(fcntl|termios|tty|pwd|grp|resource|posix|syslog|crypt|pty|readline)\b', msg = "POSIX-only standard-library modules.", windows = "fcntl/termios/pwd/grp/resource do not exist on Windows: use msvcrt.locking, getpass.getuser(), psutil, prompt_toolkit." },
+  { id = "py.fork", api = "os.fork", re = '\bos\.(fork|forkpty|setsid|getuid|geteuid|getpgid|killpg|mkfifo|chown|lchown)\s*\(', msg = "POSIX-only os functions.", cat = "process", windows = "Use multiprocessing / subprocess; drop uid/gid logic on Windows." },
+  { id = "py.signals", api = "POSIX signals", re = '\bsignal\.(SIGKILL|SIGHUP|SIGUSR1|SIGUSR2|SIGALRM|SIGCHLD|SIGPIPE|alarm|setitimer|pthread_kill)\b', msg = "POSIX-only signals.", cat = "process", sev = "low", windows = "Only SIGINT/SIGTERM/SIGBREAK exist on Windows; use threading.Timer instead of alarm()." },
+  { id = "py.pyobjc", api = "PyObjC", re = '^\s*(import|from)\s+(AppKit|Foundation|Quartz|objc|Cocoa|CoreFoundation)\b', msg = "PyObjC Apple framework bindings.", sev = "blocker", os = ["macos"], fix = "Use a cross-platform toolkit (PySide6/Qt, wxPython, tkinter, Kivy) or per-OS backends." },
+  { id = "py.xlib", api = "python-xlib / dbus", re = '^\s*(import|from)\s+(Xlib|dbus|gi\.repository|evdev|pyudev|alsaaudio|pulsectl)\b', msg = "Linux desktop bindings (X11, D-Bus, GObject, evdev, ALSA).", sev = "high", os = ["linux", "freebsd"], fix = "PySide6 / pynput / sounddevice / psutil offer portable equivalents." },
+  { id = "py.shell-commands", api = "subprocess unix tools", re = '''subprocess\.\w+\s*\(\s*\[?\s*['"](ls|grep|sed|awk|cat|chmod|xdg-open|open|apt-get|brew|systemctl|launchctl|pkg)\b''', msg = "Shells out to Unix tools.", cat = "process", sev = "low", windows = "Use Python (pathlib, shutil, re) instead of external tools." },
+]
+
+[[group]]
+lang = ["python"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "other"
+sev = "info"
+fix = "Make sure every target OS has a branch (win32, darwin, linux, freebsd*)."
+rules = [
+  { id = "py.platform-branch", api = "sys.platform", re = '\b(sys\.platform|platform\.system\s*\(\s*\)|os\.name)\s*(==|!=|\.startswith|in)', msg = "Platform branch.", once = true },
+  { id = "py.ctypes-cdll", api = "ctypes.CDLL", re = '\bctypes\.(CDLL|cdll\.LoadLibrary|PyDLL)\s*\(', msg = "Loads a native library via ctypes (names differ per OS).", sev = "medium", cat = "dynamicLibrary", fix = "Use ctypes.util.find_library and per-OS names (.dll/.dylib/.so); ship wheels per platform." },
+  { id = "py.native-ext", api = "C extension", re = '''\bExtension\s*\(\s*['"]|\bext_modules\s*=''', msg = "Builds a native C extension (needs wheels per OS/arch).", sev = "low", cat = "build", fix = "Use cibuildwheel in CI to produce wheels for Windows, macOS (arm64/x86_64) and Linux; FreeBSD builds from sdist." },
+]
+
+# --- Go ---------------------------------------------------------------------------
+[[group]]
+lang = ["go"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Use the portable os/os/exec/path/filepath packages; move Windows code into *_windows.go files with //go:build windows and add *_unix.go counterparts."
+rules = [
+  { id = "go.x-sys-windows", api = "golang.org/x/sys/windows", re = '"golang\.org/x/sys/windows(/\w+)*"', msg = "x/sys/windows import.", fix = "Split into *_windows.go and provide golang.org/x/sys/unix implementations for darwin/linux/freebsd." },
+  { id = "go.syscall-windows", api = "syscall (Windows)", re = '\bsyscall\.(NewLazyDLL|LoadDLL|MustLoadDLL|Handle|UTF16PtrFromString|GetProcAddress|CreateFile|SysProcAttr\{\s*HideWindow)', msg = "Windows-only syscall APIs.", sev = "blocker" },
+  { id = "go.registry", api = "x/sys/windows/registry", re = '"golang\.org/x/sys/windows/registry"|\bregistry\.(OpenKey|CURRENT_USER|LOCAL_MACHINE)\b', msg = "Windows registry access.", cat = "registry", fix = "Store config under os.UserConfigDir()." },
+  { id = "go.lxn-walk", api = "lxn/walk / win", re = '"github\.com/lxn/(walk|win)"', msg = "Windows-only Go GUI library.", cat = "ui", sev = "blocker", fix = "Fyne, Gio, Wails, or Qt bindings (miqt)." },
+  { id = "go.windows-env", api = "APPDATA env", re = 'os\.Getenv\s*\(\s*"(APPDATA|LOCALAPPDATA|USERPROFILE|PROGRAMDATA|TEMP)"', msg = "Windows-only environment variables.", cat = "filesystem", sev = "medium", fix = "Use os.UserConfigDir(), os.UserCacheDir(), os.UserHomeDir(), os.TempDir()." },
+  { id = "go.exec-cmd", api = "exec cmd.exe", re = 'exec\.Command\s*\(\s*"(cmd(\.exe)?|powershell(\.exe)?|notepad|explorer)"', msg = "Launches Windows shells/tools.", cat = "process", sev = "medium", fix = "Use Go code instead, or per-OS commands (open / xdg-open) behind runtime.GOOS." },
+]
+
+[[group]]
+lang = ["go"]
+os = ["macos", "linux", "freebsd"]
+cat = "other"
+sev = "medium"
+fix = "Move Unix-only code into *_unix.go (//go:build unix) and provide a *_windows.go implementation."
+rules = [
+  { id = "go.x-sys-unix", api = "golang.org/x/sys/unix", re = '"golang\.org/x/sys/unix"', msg = "x/sys/unix import (not available on Windows).", windows = "Provide *_windows.go equivalents using x/sys/windows." },
+  { id = "go.syscall-unix", api = "syscall (Unix)", re = '\bsyscall\.(Kill|Getuid|Setsid|Flock|Mmap|Exec|ForkExec|SIGKILL|SIGHUP|SIGUSR1|Stat_t|Termios)\b', msg = "Unix-only syscall APIs.", windows = "Use os.Process.Kill, os.Stat, os/signal (only Interrupt/Kill on Windows)." },
+  { id = "go.cgo", api = "cgo", re = '^\s*import\s+"C"\s*$|#cgo\s+(LDFLAGS|CFLAGS)', msg = "cgo: cross-compiling needs a C toolchain per target (zig cc works well).", os = ["windows", "macos", "linux", "freebsd"], sev = "medium", cat = "build", fix = "Prefer pure Go; otherwise set CC=\"zig cc -target ...\" when cross-compiling, or build natively in CI." },
+  { id = "go.build-tags", api = "//go:build", re = '^//\s*(go:build|\+build)\s+.*\b(windows|darwin|linux|freebsd)\b', msg = "OS build constraint — make sure every target has a file.", os = ["windows", "macos", "linux", "freebsd"], sev = "info", cat = "build", once = true, fix = "Check that windows, darwin, linux and freebsd (or unix) variants all exist." },
+]
+
+# --- Rust ---------------------------------------------------------------------------
+[[group]]
+lang = ["rust"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Gate with #[cfg(windows)] and provide #[cfg(unix)] / target_os implementations, or use portable crates (dirs, winit, cpal, gilrs, wgpu)."
+rules = [
+  { id = "rs.winapi", api = "winapi / windows / windows-sys", re = '\buse\s+(winapi|windows|windows_sys)::|\b(winapi|windows_sys)::\w+', msg = "Windows API bindings.", once = true },
+  { id = "rs.std-os-windows", api = "std::os::windows", re = '\bstd::os::windows\b', msg = "Windows-only std extensions.", sev = "medium", fix = "Gate with #[cfg(windows)] and add a #[cfg(unix)] branch using std::os::unix." },
+  { id = "rs.winreg", api = "winreg crate", re = '\buse\s+winreg\b|\bRegKey::predef\s*\(', msg = "Registry access via the winreg crate.", cat = "registry", fix = "Store settings with the `directories`/`dirs` crate + serde (toml/json), or the `confy` crate." },
+  { id = "rs.d3d", api = "Direct3D crates", re = '\b(d3d12|wio|dxgi)::|Win32::Graphics::(Direct3D\d*|Dxgi)', msg = "Direct3D/DXGI usage from Rust.", cat = "graphics", sev = "blocker", fix = "wgpu (Vulkan/Metal/D3D12/GL) is the portable choice; ash for raw Vulkan." },
+]
+
+[[group]]
+lang = ["rust"]
+os = ["macos"]
+cat = "other"
+sev = "high"
+fix = "Gate with #[cfg(target_os = \"macos\")] and use portable crates: winit (windowing), wgpu (graphics), cpal (audio), rfd (dialogs), arboard (clipboard)."
+rules = [
+  { id = "rs.cocoa", api = "cocoa / objc / objc2 crates", re = '\buse\s+(cocoa|objc|objc2|objc2_app_kit|objc2_foundation|core_foundation|core_graphics|metal|block2?)::', msg = "Apple framework bindings.", once = true },
+]
+
+[[group]]
+lang = ["rust"]
+os = ["linux", "freebsd"]
+cat = "other"
+sev = "high"
+fix = "Gate with #[cfg(target_os = \"linux\")] and use portable crates (winit, cpal, notify, mio, gilrs)."
+rules = [
+  { id = "rs.x11", api = "x11 / xcb / wayland crates", re = '\buse\s+(x11|x11rb|xcb|wayland_client|smithay_client_toolkit)::', msg = "X11/Wayland bindings.", cat = "windowing", once = true, fix = "winit (or sdl3 crate) for windowing." },
+  { id = "rs.alsa", api = "alsa / libpulse crates", re = '\buse\s+(alsa|libpulse_binding|pipewire)::', msg = "Linux audio bindings.", cat = "audio", os = ["linux"], fix = "cpal or rodio (WASAPI/CoreAudio/ALSA/JACK)." },
+  { id = "rs.epoll", api = "libc::epoll / inotify", re = '\blibc::(epoll_\w+|inotify_\w+|eventfd|timerfd_\w+)\b|\buse\s+(inotify|epoll)\b', msg = "Linux-only syscalls from Rust.", os = ["linux"], fix = "mio / tokio / polling (event loop), notify (file watching)." },
+  { id = "rs.std-os-linux", api = "std::os::linux", re = '\bstd::os::linux\b', msg = "Linux-only std extensions.", os = ["linux"], sev = "medium" },
+]
+
+[[group]]
+lang = ["rust"]
+os = ["macos", "linux", "freebsd"]
+cat = "other"
+sev = "medium"
+fix = "Gate with #[cfg(unix)] and add a #[cfg(windows)] branch."
+rules = [
+  { id = "rs.std-os-unix", api = "std::os::unix", re = '\bstd::os::unix\b', msg = "Unix-only std extensions (permissions, symlinks, fds).", windows = "Use std::os::windows equivalents or skip (e.g. permissions mode)." },
+  { id = "rs.nix", api = "nix crate", re = '\buse\s+nix::', msg = "nix crate (Unix-only).", once = true, windows = "Use windows-sys / std equivalents behind #[cfg(windows)]." },
+  { id = "rs.libc-unix", api = "libc::fork/signal", re = '\blibc::(fork|kill|signal|sigaction|getuid|mmap|dlopen|ioctl)\b', msg = "Unix libc calls.", once = true, windows = "Use std::process, libloading (dlopen), memmap2 (mmap), ctrlc (signals)." },
+]
+
+[[group]]
+lang = ["rust"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "build"
+sev = "info"
+fix = "Check that every target has a cfg branch (windows, macos, linux, freebsd) or a fallback."
+rules = [
+  { id = "rs.cfg-os", api = "#[cfg(target_os)]", re = '#\[cfg\(\s*(target_os\s*=|windows|unix|not\()', msg = "Platform-conditional Rust code.", once = true },
+  { id = "rs.build-rs-link", api = "cargo:rustc-link-lib", re = 'cargo:rustc-link-(lib|search)=', msg = "build.rs links native libraries (names differ per OS).", sev = "medium" },
+]
+
+# --- Java / Kotlin -------------------------------------------------------------------
+[[group]]
+lang = ["java", "kotlin"]
+os = ["windows"]
+cat = "other"
+sev = "medium"
+fix = "The JVM is portable; keep native bits optional and resolve paths with System.getProperty(\"user.home\") / Path.of(...)."
+rules = [
+  { id = "java.jna-win32", api = "JNA win32", re = '\bcom\.sun\.jna\.platform\.win32\b|\bUser32\.INSTANCE\b|\bKernel32\.INSTANCE\b', msg = "JNA bindings to Win32.", sev = "blocker", fix = "Use JDK APIs (java.awt.Desktop, ProcessHandle, java.nio.file) or per-OS JNA code paths." },
+  { id = "java.runtime-exec-cmd", api = "Runtime.exec(cmd)", re = '(Runtime\.getRuntime\(\)\.exec|new\s+ProcessBuilder)\s*\(\s*(new\s+String\[\]\s*\{\s*)?"(cmd(\.exe)?|powershell|rundll32|reg|tasklist|taskkill)', msg = "Launches Windows command tools.", cat = "process", fix = "Use Java APIs (Desktop.open/browse, ProcessHandle) or OS-specific commands." },
+  { id = "java.appdata", api = "APPDATA env", re = 'System\.getenv\s*\(\s*"(APPDATA|LOCALAPPDATA|USERPROFILE|TEMP)"', msg = "Windows-only environment variables.", cat = "filesystem", fix = "Use System.getProperty(\"user.home\") + per-OS dirs (e.g. the directories-jvm library) and java.io.tmpdir." },
+  { id = "java.prefs-registry", api = "WinRegistry hacks", re = '\bWindowsPreferences\b|\bWinRegistry\b', msg = "Registry access via reflection hacks.", cat = "registry", sev = "high", fix = "Use java.util.prefs.Preferences (backed by registry/plist/files per OS)." },
+  { id = "java.swt-win32", api = "SWT win32", re = '\borg\.eclipse\.swt\.internal\.win32\b|\bswt-win32\b', msg = "SWT Windows internals.", cat = "ui", sev = "high", fix = "Use public SWT APIs and ship the per-OS SWT fragment (cocoa/gtk)." },
+]
+
+[[group]]
+lang = ["java", "kotlin"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "dynamicLibrary"
+sev = "medium"
+fix = "Ship native libraries for every OS/arch (lib<name>.so / lib<name>.dylib / <name>.dll), e.g. via a native-loader that extracts the right one from the jar."
+rules = [
+  { id = "java.jni-load", api = "System.loadLibrary", re = '\bSystem\.(loadLibrary|load)\s*\(', msg = "JNI native library loading." },
+  { id = "java.jni-native", api = "native methods", re = '\b(public|private|protected|static)\s+(static\s+)?native\s+\w', msg = "JNI native method declarations.", once = true },
+  { id = "java.os-name", api = "os.name", re = 'System\.getProperty\s*\(\s*"os\.name"\s*\)', msg = "OS detection — ensure every branch exists.", sev = "info", cat = "other", once = true },
+]
+
+# --- JavaScript / TypeScript (Node, Electron) -------------------------------------
+[[group]]
+lang = ["js"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "other"
+sev = "info"
+fix = "Ensure each platform branch handles win32, darwin, linux and freebsd."
+rules = [
+  { id = "js.process-platform", api = "process.platform", re = '\bprocess\.platform\b|\bos\.platform\s*\(\s*\)', msg = "Platform branch.", once = true },
+  { id = "js.native-addon", api = "native addon", re = '''\brequire\s*\(\s*['"](bindings|node-gyp-build|prebuild-install)['"]|\.node['"]\s*\)|\bnode-addon-api\b|\bnapi_\w+\s*\(''', msg = "Native Node addon (needs prebuilt binaries per OS/arch; FreeBSD usually builds from source).", sev = "medium", cat = "build", fix = "Use prebuildify / node-gyp-build with CI for every target, or a pure-JS/WASM alternative." },
+  { id = "js.ffi", api = "ffi-napi / koffi", re = '''\brequire\s*\(\s*['"](ffi-napi|ffi|koffi|node-ffi)['"]|from\s+['"](koffi|ffi-napi)['"]''', msg = "FFI into native libraries.", sev = "medium", cat = "dynamicLibrary", fix = "Load per-OS library names; avoid system DLLs like user32." },
+  { id = "js.path-sep", api = "path.win32 / backslashes", re = '''\bpath\.win32\b|\.split\s*\(\s*['"]\\\\['"]\s*\)|\.join\s*\(\s*['"]\\\\['"]\s*\)''', msg = "Windows path separator handling.", sev = "low", cat = "filesystem", fix = "Use path.join / path.sep / path.posix as appropriate." },
+]
+
+[[group]]
+lang = ["js"]
+os = ["windows"]
+cat = "process"
+sev = "medium"
+fix = "Use Node APIs (fs, os, path) or per-OS commands behind process.platform."
+rules = [
+  { id = "js.exec-cmd", api = "child_process cmd", re = '''\b(exec|execSync|spawn|spawnSync|execFile)\s*\(\s*['"`](cmd(\.exe)?|powershell(\.exe)?|start |del |copy |taskkill|reg |wmic|where )''', msg = "Shells out to Windows commands." },
+  { id = "js.win-registry", api = "registry npm packages", re = '''\brequire\s*\(\s*['"](winreg|regedit|registry-js|windows-registry)['"]|from\s+['"](winreg|regedit|registry-js)['"]''', msg = "Windows registry packages.", cat = "registry", sev = "high", fix = "Store settings in app.getPath('userData') (Electron) or a JSON file via env-paths." },
+  { id = "js.appdata", api = "APPDATA env", re = 'process\.env\.(APPDATA|LOCALAPPDATA|USERPROFILE|ProgramData|TEMP)\b', msg = "Windows-only environment variables.", cat = "filesystem", fix = "Use os.homedir(), os.tmpdir(), env-paths, or Electron app.getPath()." },
+  { id = "js.edge-js", api = "edge-js / winax", re = '''\brequire\s*\(\s*['"](edge-js|electron-edge-js|winax|node-windows)['"]''', msg = "Windows-only native bridges (.NET/COM/services).", sev = "blocker", cat = "other", fix = "Replace with cross-platform modules or a separate per-OS helper process." },
+]
+
+[[group]]
+lang = ["js"]
+os = ["macos", "linux", "freebsd"]
+cat = "process"
+sev = "low"
+fix = "Guard Unix commands with process.platform !== 'win32' and provide Windows equivalents."
+rules = [
+  { id = "js.exec-unix", api = "child_process unix tools", re = '''\b(exec|execSync|spawn|spawnSync|execFile)\s*\(\s*['"`](ls|rm -rf|cp |mv |chmod|open |xdg-open|osascript|defaults |launchctl|systemctl)''', msg = "Shells out to Unix commands.", windows = "Use fs.rm/fs.cp/shell.openPath (Electron) or Windows commands." },
+  { id = "js.applescript", api = "osascript", re = '''\bosascript\b|\brequire\s*\(\s*['"](run-applescript|node-mac-\w+|macos-\w+)['"]''', msg = "AppleScript / macOS-only modules.", sev = "high", os = ["macos"], fix = "Provide per-OS implementations (PowerShell on Windows, D-Bus on Linux)." },
+]
+
+# --- Lua ---------------------------------------------------------------------------
+[[group]]
+lang = ["lua"]
+os = ["windows"]
+cat = "process"
+sev = "medium"
+fix = "Use LuaFileSystem (lfs) / portable Lua APIs, or branch on package.config:sub(1,1) == '\\\\'."
+rules = [
+  { id = "lua.os-execute-win", api = "os.execute(cmd)", re = '''(os\.execute|io\.popen)\s*\(\s*['"](dir|del|copy|move|cls|start|mkdir |rmdir |type )''', msg = "Runs cmd.exe built-ins." },
+  { id = "lua.loadlib-dll", api = "package.loadlib(.dll)", re = '''package\.loadlib\s*\(\s*['"][^'"]+\.dll['"]''', msg = "Loads a Windows DLL from Lua.", cat = "dynamicLibrary", fix = "Choose the extension per OS (.dll/.so/.dylib) or use package.cpath." },
+]

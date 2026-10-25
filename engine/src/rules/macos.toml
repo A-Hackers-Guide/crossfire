@@ -1,0 +1,163 @@
+# Apple platform APIs: Cocoa/AppKit, UIKit, Metal, Core* frameworks, GCD,
+# mach, Objective-C runtime and Swift framework imports.
+
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "ui"
+sev = "blocker"
+fix = "Use SDL3 for windows/events or a portable UI toolkit (Qt 6, wxWidgets, Dear ImGui, Avalonia for .NET); keep Cocoa code in an Objective-C++ backend compiled only on macOS."
+rules = [
+  { id = "mac.cocoa-h", api = "Cocoa/AppKit", re = '#\s*(import|include)\s*[<"](Cocoa/Cocoa\.h|AppKit/AppKit\.h|AppKit/\w+\.h)[>"]|@import\s+(Cocoa|AppKit)\s*;', msg = "Imports Cocoa / AppKit." },
+  { id = "mac.uikit-h", api = "UIKit", re = '#\s*(import|include)\s*[<"]UIKit/\w+\.h[>"]|@import\s+UIKit\s*;', msg = "Imports UIKit (iOS / Mac Catalyst)." },
+  { id = "mac.nsapplication", api = "NSApplication", re = '\b(NSApplication|NSApp|NSApplicationMain|NSApplicationDelegate)\b', msg = "Cocoa application object / run loop.", cat = "windowing", once = true, fix = "SDL_Init + SDL_PollEvent loop (SDL3 drives NSApplication for you)." },
+  { id = "mac.nswindow", api = "NSWindow", re = '\b(NSWindow|NSWindowController|NSWindowStyleMask\w*|NSPanel)\b', msg = "Creates AppKit windows.", cat = "windowing", once = true, fix = "SDL_CreateWindow / glfwCreateWindow; Qt QWindow for toolkit apps." },
+  { id = "mac.nsview", api = "NSView", re = '\b(NSView|NSOpenGLView|NSViewController|NSTrackingArea)\b', msg = "AppKit views.", cat = "windowing", once = true },
+  { id = "mac.nsevent", api = "NSEvent", re = '\bNSEvent\b|\bNSEventType\w*|\b(keyDown|keyUp|mouseDown|mouseMoved|scrollWheel)\s*:\s*\(\s*NSEvent', msg = "Handles AppKit input events.", cat = "input", sev = "high", once = true, fix = "Map to SDL3 events (SDL_EVENT_KEY_DOWN, SDL_EVENT_MOUSE_MOTION...)." },
+  { id = "mac.nsalert", api = "NSAlert", re = '\b(NSAlert|NSOpenPanel|NSSavePanel)\b', msg = "AppKit dialogs.", sev = "medium", once = true, fix = "SDL_ShowSimpleMessageBox / SDL_ShowOpenFileDialog, or tinyfiledialogs." },
+  { id = "mac.nsmenu", api = "NSMenu", re = '\b(NSMenu|NSMenuItem|NSStatusBar|NSStatusItem)\b', msg = "AppKit menus / status items.", sev = "high", once = true, fix = "Qt menus, SDL3 tray API (SDL_CreateTray), or Dear ImGui menu bars." },
+  { id = "mac.controls", api = "AppKit controls", re = '\b(NSButton|NSTextField|NSTableView|NSOutlineView|NSScrollView|NSStackView|NSSplitView|NSTabView|NSSlider|NSPopUpButton|NSImageView)\b', msg = "Native AppKit controls.", once = true, fix = "Rebuild the UI in Qt 6 / wxWidgets / Dear ImGui (or Avalonia/Flutter for a full rewrite)." },
+  { id = "mac.uiview", api = "UIView", re = '\b(UIView|UIViewController|UIWindow|UIApplication|UIApplicationMain|UIButton|UILabel)\b', msg = "UIKit view hierarchy.", once = true },
+  { id = "mac.nsworkspace", api = "NSWorkspace", re = '\bNSWorkspace\b', msg = "Opens URLs/files via NSWorkspace.", cat = "process", sev = "medium", once = true, fix = "SDL_OpenURL or cf_open_url() (xdg-open / ShellExecute)." },
+  { id = "mac.nspasteboard", api = "NSPasteboard", re = '\bNSPasteboard\b', msg = "AppKit clipboard.", sev = "medium", once = true, fix = "SDL_GetClipboardText / SDL_SetClipboardText." },
+  { id = "mac.nsimage", api = "NSImage", re = '\b(NSImage|NSBitmapImageRep|NSColor|NSFont|NSBezierPath|NSGraphicsContext)\b', msg = "AppKit drawing types.", cat = "graphics", sev = "high", once = true, fix = "stb_image for decoding; Skia/Cairo/NanoVG for 2D drawing; FreeType for fonts." },
+  { id = "mac.carbon", api = "Carbon", re = '#\s*include\s*[<"]Carbon/Carbon\.h[>"]|\bkVK_\w+|\bGetEventMonitorTarget\b', msg = "Legacy Carbon APIs (often key codes kVK_*).", sev = "high", once = true, fix = "Use SDL_Scancode values for keys." },
+  { id = "mac.cgeventtap", api = "CGEventTap", re = '\bCGEvent(TapCreate|Post|CreateKeyboardEvent|CreateMouseEvent)\b', msg = "Quartz event taps / synthetic input.", cat = "input", sev = "high", fix = "No portable equivalent: SendInput (Windows), uinput/XTest (Linux), XTest (FreeBSD)." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "graphics"
+sev = "blocker"
+fix = "Use SDL_GPU (Metal/Vulkan/D3D12 backends) or Vulkan everywhere (MoltenVK on macOS); keep Metal-cpp only for the macOS backend."
+rules = [
+  { id = "mac.metal-h", api = "Metal", re = '#\s*(import|include)\s*[<"](Metal/Metal\.h|Metal/\w+\.h|Metal/Metal\.hpp)[>"]|@import\s+Metal\s*;', msg = "Metal renderer.", linux = "Vulkan or SDL_GPU (Vulkan backend); shaders via SDL_shadercross.", windows = "D3D12/Vulkan via SDL_GPU, or Vulkan directly.", freebsd = "Vulkan via SDL_GPU on drm-kmod." },
+  { id = "mac.metalkit-h", api = "MetalKit", re = '#\s*(import|include)\s*[<"]MetalKit/\w+\.h[>"]|\bMTKView\b|\bMTKTextureLoader\b|\bMTKMesh\b', msg = "MetalKit view / loaders.", once = true, fix = "SDL window + SDL_GPU swapchain; stb_image / KTX for textures; cgltf/tinyobjloader for meshes." },
+  { id = "mac.mtldevice", api = "MTLCreateSystemDefaultDevice", re = '\bMTLCreateSystemDefaultDevice\s*\(|\bid\s*<\s*MTL\w+\s*>|\bMTL::\w+', msg = "Metal device / objects.", fix = "SDL_CreateGPUDevice; map MTLBuffer/MTLTexture/MTLRenderPipelineState to SDL_GPUBuffer/SDL_GPUTexture/SDL_GPUGraphicsPipeline." },
+  { id = "mac.cametallayer", api = "CAMetalLayer", re = '\bCAMetalLayer\b|\bnextDrawable\b|\bCAMetalDrawable\b', msg = "Core Animation Metal layer / drawables.", sev = "high", fix = "SDL_ClaimWindowForGPUDevice + SDL_AcquireGPUSwapchainTexture; vkCreateSwapchainKHR on Vulkan." },
+  { id = "mac.quartzcore", api = "QuartzCore", re = '#\s*(import|include)\s*[<"]QuartzCore/\w+\.h[>"]|\bCADisplayLink\b|\bCALayer\b', msg = "Core Animation.", sev = "high", once = true, fix = "Drive frames from the main loop (SDL vsync via SDL_SetGPUSwapchainParameters)." },
+  { id = "mac.cvdisplaylink", api = "CVDisplayLink", re = '\bCVDisplayLink\w*\b', msg = "CoreVideo display link timing.", cat = "timing", sev = "high", once = true, fix = "Use vsync-paced presentation and std::chrono for frame timing." },
+  { id = "mac.coregraphics", api = "CoreGraphics", re = '\bCG(ContextRef|ImageRef|ColorSpaceRef|BitmapContextCreate|ContextDraw\w*|DisplayBounds|MainDisplayID|DisplayPixelsWide|GetActiveDisplayList)\b', msg = "Core Graphics drawing / display queries.", sev = "high", once = true, fix = "Skia/Cairo for drawing; SDL_GetDisplays / SDL_GetCurrentDisplayMode for displays." },
+  { id = "mac.coretext", api = "CoreText", re = '\bCT(FontRef|FontCreate\w*|LineRef|FramesetterRef|LineDraw)\b', msg = "Core Text font rendering.", sev = "high", once = true, fix = "FreeType + HarfBuzz, or SDL_ttf / stb_truetype." },
+  { id = "mac.simd", api = "simd/simd.h", re = '#\s*include\s*[<"]simd/\w+\.h[>"]|\bsimd_float[234](x[234])?\b|\bmatrix_float4x4\b', msg = "Apple simd vector types.", sev = "medium", once = true, fix = "Use GLM / HandmadeMath / cglm (watch alignment differences)." },
+  { id = "mac.accelerate", api = "Accelerate", re = '#\s*include\s*[<"]Accelerate/Accelerate\.h[>"]|\bvDSP_\w+\s*\(|\bcblas_\w+\s*\(', msg = "Accelerate framework (vDSP/BLAS).", cat = "other", sev = "medium", fix = "OpenBLAS / Eigen for BLAS; KissFFT / PocketFFT / FFTW for vDSP FFTs." },
+  { id = "mac.imageio", api = "ImageIO", re = '\bCGImageSource\w*\b|\bCGImageDestination\w*\b', msg = "ImageIO decoding/encoding.", sev = "medium", once = true, fix = "stb_image / stb_image_write, libpng, libjpeg-turbo." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "audio"
+sev = "blocker"
+fix = "Use miniaudio or SDL3 audio (CoreAudio/WASAPI/PipeWire/PulseAudio/ALSA/OSS backends); OpenAL Soft or FMOD for 3D audio."
+rules = [
+  { id = "mac.coreaudio-h", api = "CoreAudio", re = '#\s*include\s*[<"]CoreAudio/\w+\.h[>"]|\bAudioObjectGetPropertyData\b|\bAudioDeviceID\b', msg = "CoreAudio HAL." },
+  { id = "mac.audiotoolbox", api = "AudioToolbox", re = '#\s*include\s*[<"]AudioToolbox/\w+\.h[>"]|\bAudioQueue(New|Start|Stop|AllocateBuffer|EnqueueBuffer)\w*\b|\bAudioServicesPlaySystemSound\b|\bExtAudioFile\w+\b', msg = "AudioToolbox queues / file services." },
+  { id = "mac.audiounit", api = "AudioUnit", re = '#\s*include\s*[<"]AudioUnit/\w+\.h[>"]|\bAudioComponent(FindNext|InstanceNew)\b|\bAudioUnit(Initialize|SetProperty|Render)\b', msg = "AudioUnit graph / output unit." },
+  { id = "mac.avfoundation", api = "AVFoundation", re = '#\s*(import|include)\s*[<"]AVFoundation/\w+\.h[>"]|\bAV(AudioEngine|AudioPlayer(Node)?|Player|PlayerItem|Asset|AudioSession|CaptureSession)\b', msg = "AVFoundation media playback/capture.", fix = "Audio: miniaudio/SDL3; video decode: FFmpeg / GStreamer / libVLC; capture: SDL3 camera API." },
+  { id = "mac.coremidi", api = "CoreMIDI", re = '#\s*include\s*[<"]CoreMIDI/\w+\.h[>"]|\bMIDIClientCreate\b', msg = "CoreMIDI.", sev = "high", fix = "RtMidi / libremidi." },
+  { id = "mac.avaudio-speech", api = "AVSpeechSynthesizer", re = '\b(AVSpeechSynthesizer|NSSpeechSynthesizer)\b', msg = "Apple speech synthesis.", sev = "high", cat = "other", fix = "SAPI (Windows), speech-dispatcher / espeak-ng (Linux/FreeBSD)." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "input"
+sev = "high"
+fix = "Use the SDL3 gamepad/joystick API (or hidapi for raw HID) which covers GameController.framework, XInput and evdev."
+rules = [
+  { id = "mac.gamecontroller", api = "GameController", re = '#\s*(import|include)\s*[<"]GameController/\w+\.h[>"]|\bGC(Controller|ExtendedGamepad|Keyboard|Mouse)\b', msg = "GameController.framework." },
+  { id = "mac.iokit-hid", api = "IOKit HID", re = '#\s*include\s*[<"]IOKit/hid/\w+\.h[>"]|\bIOHIDManager\w*\b|\bIOHIDDevice\w*\b', msg = "IOKit HID manager.", fix = "hidapi or SDL_hid_* (SDL3)." },
+  { id = "mac.iokit", api = "IOKit", re = '#\s*include\s*[<"]IOKit/\w+(/\w+)*\.h[>"]|\bIOServiceGetMatchingServices?\b|\bIORegistryEntry\w+\b|\bIOPMAssertionCreate\w*\b', msg = "IOKit device / power APIs.", cat = "other", fix = "Per OS: SetupAPI (Windows), udev/sysfs (Linux), devd/devinfo (FreeBSD); SDL_DisableScreenSaver for power assertions." },
+]
+
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "other"
+sev = "medium"
+fix = "Use the C/C++ standard library or a portable library; CoreFoundation is only available on Apple platforms."
+rules = [
+  { id = "mac.corefoundation", api = "CoreFoundation", re = '#\s*include\s*[<"]CoreFoundation/\w+\.h[>"]|\bCF(StringRef|DictionaryRef|ArrayRef|URLRef|DataRef|NumberRef|Release|Retain|StringCreateWithCString|BundleGetMainBundle)\b', msg = "CoreFoundation types.", once = true, fix = "std::string / std::map / std::vector; CFBundle paths → cf_resource_dir() or SDL_GetBasePath." },
+  { id = "mac.foundation", api = "Foundation", re = '#\s*(import|include)\s*[<"]Foundation/\w+\.h[>"]|@import\s+Foundation\s*;', msg = "Objective-C Foundation framework.", fix = "GNUstep exists for Linux/FreeBSD but is rarely worth it; port logic to C++ (std::filesystem, std::chrono) and keep Objective-C only in a macOS backend." },
+  { id = "mac.nsstring", api = "NSString", re = '\b(NSString|NSMutableString|NSArray|NSMutableArray|NSDictionary|NSMutableDictionary|NSNumber|NSData|NSURL)\b', msg = "Foundation collection/value types.", once = true, fix = "std::string, std::vector, std::unordered_map, std::filesystem::path." },
+  { id = "mac.nsbundle", api = "NSBundle", re = '\bNSBundle\b|\bpathForResource\s*:|\bCFBundleCopyResourcesDirectoryURL\b', msg = "Bundle resource lookup (Contents/Resources).", cat = "filesystem", fix = "cf_resource_dir(): bundle Resources on macOS, exe dir elsewhere; or SDL_GetBasePath." },
+  { id = "mac.nsfilemanager", api = "NSFileManager", re = '\bNSFileManager\b|\bNSSearchPathForDirectoriesInDomains\s*\(|\bNS(ApplicationSupport|Document|Caches)Directory\b', msg = "Foundation file manager / standard directories.", cat = "filesystem", fix = "std::filesystem + cf_user_data_dir() (APPDATA on Windows, XDG dirs on Linux/FreeBSD)." },
+  { id = "mac.nsuserdefaults", api = "NSUserDefaults", re = '\bNSUserDefaults\b|\bCFPreferences(Copy|Set)\w*\b', msg = "User defaults (preferences domain).", cat = "registry", fix = "A JSON/TOML/INI settings file in cf_user_data_dir() (registry on Windows if you must)." },
+  { id = "mac.nsthread", api = "NSThread", re = '\b(NSThread|NSOperationQueue|NSOperation|NSLock|NSRecursiveLock|NSCondition)\b', msg = "Foundation threading.", cat = "threading", once = true, fix = "std::thread / std::mutex / std::condition_variable or a task pool." },
+  { id = "mac.nstimer", api = "NSTimer", re = '\bNSTimer\b|\bscheduledTimerWithTimeInterval\b', msg = "Run-loop timers.", cat = "timing", once = true, fix = "SDL_AddTimer or delta time in the main loop." },
+  { id = "mac.nsnotification", api = "NSNotificationCenter", re = '\bNS(Distributed)?NotificationCenter\b', msg = "Notification center messaging.", once = true, fix = "A small observer/event bus in C++ (std::function callbacks)." },
+  { id = "mac.cfrunloop", api = "CFRunLoop", re = '\bCFRunLoop(Run|GetMain|GetCurrent|AddSource|Stop)\w*\b|\bNSRunLoop\b', msg = "Core Foundation run loops.", cat = "process", sev = "high", fix = "An explicit main loop (SDL event loop / epoll / kqueue / libuv)." },
+  { id = "mac.security", api = "Security.framework", re = '#\s*include\s*[<"]Security/\w+\.h[>"]|\bSecItem(Add|CopyMatching|Update|Delete)\b|\bSecRandomCopyBytes\b|\bSecKeychain\w+\b', msg = "Keychain / Security framework.", sev = "high", fix = "Credential storage: libsecret (Linux), Credential Manager (Windows), keepassxc/pass or an encrypted file (FreeBSD); keyring libs: keychain (C++), keyring (Rust/Python). Randomness: getentropy / BCryptGenRandom." },
+  { id = "mac.oslog", api = "os_log", re = '\bos_(log|log_info|log_error|log_debug|signpost\w*)\s*\(|#\s*include\s*<os/log\.h>', msg = "Apple unified logging.", sev = "low", fix = "spdlog / SDL_Log / fprintf(stderr); syslog on Linux/FreeBSD." },
+  { id = "mac.unfair-lock", api = "os_unfair_lock", re = '\bos_unfair_lock\w*\b|\bOSSpinLock\w*\b|\bOSAtomic\w+\b', msg = "Apple lock/atomic primitives.", cat = "threading", fix = "std::mutex / std::atomic." },
+  { id = "mac.nsgetexecutablepath", api = "_NSGetExecutablePath", re = '\b_NSGetExecutablePath\s*\(|\bproc_pidpath\s*\(|#\s*include\s*<mach-o/dyld\.h>', msg = "macOS executable path lookup.", cat = "filesystem", fix = "cf_executable_path() covers /proc/self/exe, sysctl KERN_PROC_PATHNAME and GetModuleFileName." },
+  { id = "mac.libproc", api = "libproc", re = '#\s*include\s*<libproc\.h>|\bproc_(listpids|pidinfo|name)\s*\(', msg = "macOS process introspection.", cat = "process", fix = "/proc (Linux), sysctl KERN_PROC / libprocstat (FreeBSD), Toolhelp32 (Windows)." },
+  { id = "mac.ns-autoreleasepool", api = "@autoreleasepool", re = '@autoreleasepool\b|\bNSAutoreleasePool\b', msg = "Objective-C memory management scopes.", sev = "low", once = true, fix = "Only needed in Objective-C(++) backends; C++ uses RAII." },
+  { id = "mac.storekit", api = "StoreKit/GameKit", re = '#\s*(import|include)\s*[<"](StoreKit|GameKit|CloudKit)/\w+\.h[>"]', msg = "Apple store / Game Center / iCloud services.", sev = "blocker", fix = "Swap for a platform service layer: Steamworks (all desktop OSes), Epic Online Services, or your own backend." },
+  { id = "mac.usernotifications", api = "UserNotifications", re = '#\s*(import|include)\s*[<"]UserNotifications/\w+\.h[>"]|\bNSUserNotification\w*\b|\bUNUserNotificationCenter\b', msg = "macOS notifications.", sev = "high", fix = "libnotify (Linux/FreeBSD), WinRT toast / Shell_NotifyIcon balloon (Windows); or SDL3 / Qt notification wrappers." },
+  { id = "mac.webkit", api = "WebKit", re = '#\s*(import|include)\s*[<"]WebKit/\w+\.h[>"]|\bWKWebView\b|\bWebView\b', msg = "WebKit views.", cat = "ui", sev = "high", fix = "webview/webview (WebView2 / WebKitGTK / WKWebView) or CEF." },
+]
+
+# --- GCD / mach -----------------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "threading"
+sev = "medium"
+fix = "Use std::thread + a task queue (Taskflow, BS::thread_pool, oneTBB); libdispatch is also available on Linux and FreeBSD (pkg libdispatch) but not on Windows."
+rules = [
+  { id = "mac.gcd", api = "Grand Central Dispatch", re = '\bdispatch_(async|sync|after|apply|once|get_main_queue|get_global_queue|queue_create|group_\w+|semaphore_\w+|source_create|barrier_async)\s*\(', msg = "Grand Central Dispatch queues.", linux = "libdispatch (swift-corelibs-libdispatch) builds on Linux; or std::thread + task queue.", freebsd = "pkg install libdispatch; or std::thread + task queue.", windows = "No GCD: use std::thread pools, Windows thread pool, or Taskflow." },
+  { id = "mac.gcd-h", api = "dispatch/dispatch.h", re = '#\s*include\s*<dispatch/dispatch\.h>', msg = "Includes libdispatch.", sev = "low" },
+  { id = "mac.blocks", api = "Clang blocks", re = '\^\s*(void|int|BOOL|bool)?\s*\(\s*(void|[A-Za-z_][\w\s\*]*)?\)\s*\{|\bBlock_copy\s*\(', msg = "Clang block literals (^{ }); require -fblocks + BlocksRuntime off Apple.", sev = "medium", once = true, fix = "Use C++ lambdas / std::function." },
+  { id = "mac.mach-time", api = "mach_absolute_time", re = '\bmach_(absolute_time|continuous_time|timebase_info)\s*\(|#\s*include\s*<mach/mach_time\.h>', msg = "Mach high-resolution clock.", cat = "timing", sev = "low", fix = "std::chrono::steady_clock / clock_gettime(CLOCK_MONOTONIC) / cf_ticks_ns()." },
+  { id = "mac.mach", api = "mach_*", re = '\b(mach_task_self|task_info|thread_policy_set|host_statistics(64)?|host_processor_info|semaphore_create|mach_port_\w+|vm_(allocate|deallocate|protect))\s*\(|#\s*include\s*<mach/\w+\.h>', msg = "Mach kernel interfaces.", cat = "process", sev = "high", fix = "POSIX equivalents (getrusage, sysconf, mmap, sem_open) or /proc (Linux), sysctl (FreeBSD)." },
+  { id = "mac.pthread-jit", api = "pthread_jit_write_protect_np", re = '\bpthread_jit_write_protect_np\s*\(|\bMAP_JIT\b|\bsys_icache_invalidate\s*\(', msg = "Apple Silicon JIT memory protection.", cat = "process", sev = "medium", fix = "Guard with __APPLE__; elsewhere use mprotect(RW→RX) and __builtin___clear_cache." },
+  { id = "mac.pthread-mach-thread", api = "pthread_mach_thread_np", re = '\bpthread_(mach_thread_np|threadid_np|setname_np\s*\(\s*"|from_mach_thread_np)\b', msg = "Darwin-specific pthread extensions (pthread_setname_np takes only a name on macOS).", sev = "low", fix = "Use cf_set_thread_name(): pthread_setname_np(pthread_self(), n) on Linux, pthread_set_name_np on FreeBSD, SetThreadDescription on Windows." },
+]
+
+# --- Objective-C runtime ---------------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["macos"]
+cat = "other"
+sev = "high"
+fix = "Isolate Objective-C(++) in a macOS-only backend (.mm file) behind a C++ interface; port shared logic to C++."
+rules = [
+  { id = "objc.runtime", api = "objc runtime", re = '#\s*include\s*<objc/(runtime|message|objc)\.h>|\bobjc_msgSend\w*\s*\(|\bobjc_getClass\s*\(|\bsel_registerName\s*\(|\bclass_addMethod\s*\(', msg = "Objective-C runtime calls from C/C++." },
+  { id = "objc.interface", api = "@interface", re = '^\s*@(interface|implementation|protocol)\b', msg = "Objective-C class definitions.", lang = ["objc"], once = true, linux = "Port to C++ classes, or (rarely) GNUstep's libobjc2 + gnustep-base.", freebsd = "Port to C++ classes, or GNUstep from ports.", windows = "Port to C++ classes (Objective-C has no practical Windows toolchain)." },
+  { id = "objc.import", api = "#import", re = '^\s*#\s*import\s*[<"]', msg = "#import directive (Objective-C; deprecated in C/C++ on GCC).", lang = ["c", "cpp"], sev = "low", once = true, fix = "Use #include with include guards / #pragma once." },
+  { id = "objc.arc", api = "__bridge", re = '\b__bridge(_retained|_transfer)?\b|\bCFBridgingRe(lease|tain)\b', msg = "ARC bridging casts between Objective-C and CoreFoundation.", sev = "medium", once = true },
+]
+
+# --- Swift --------------------------------------------------------------------------
+[[group]]
+lang = ["swift"]
+os = ["macos"]
+cat = "ui"
+sev = "blocker"
+fix = "Swift runs on Linux and Windows (swift.org toolchains) but Apple frameworks do not: move UI to a portable toolkit or keep a macOS-only target and share a pure-Swift core package."
+rules = [
+  { id = "swift.appkit", api = "import AppKit", re = '^\s*import\s+(AppKit|Cocoa)\b', msg = "Swift imports AppKit/Cocoa.", linux = "Swift on Linux has no AppKit: use SwiftGtk/Adwaita-for-Swift, a C UI toolkit via C interop, or keep the UI native per OS.", windows = "Swift on Windows has no AppKit: use WinUI via swift-winrt, or a C/C++ UI library through interop." },
+  { id = "swift.uikit", api = "import UIKit", re = '^\s*import\s+UIKit\b', msg = "Swift imports UIKit." },
+  { id = "swift.swiftui", api = "import SwiftUI", re = '^\s*import\s+SwiftUI\b', msg = "SwiftUI is Apple-only.", fix = "Share a model package; reimplement views per OS, or move to a cross-platform UI (Flutter, Qt, Avalonia, Tauri, SwiftCrossUI)." },
+  { id = "swift.metal", api = "import Metal", re = '^\s*import\s+(Metal|MetalKit|QuartzCore)\b', msg = "Swift imports Metal / MetalKit.", cat = "graphics", fix = "Use Vulkan / SDL_GPU through C interop for non-Apple targets." },
+  { id = "swift.avfoundation", api = "import AVFoundation", re = '^\s*import\s+(AVFoundation|AVFAudio|CoreAudio|AudioToolbox)\b', msg = "Swift imports Apple audio/video frameworks.", cat = "audio", fix = "miniaudio / SDL3 through C interop." },
+  { id = "swift.gamecontroller", api = "import GameController", re = '^\s*import\s+(GameController|GameKit|SpriteKit|SceneKit|RealityKit)\b', msg = "Swift imports Apple game frameworks.", cat = "graphics", fix = "SDL3 (C interop) or a cross-platform engine (Godot, raylib via Swift bindings)." },
+  { id = "swift.foundation", api = "import Foundation", re = '^\s*import\s+Foundation\b', msg = "Foundation is available on Linux/Windows via swift-corelibs-foundation, with gaps (no NSUserDefaults sync, bundle layout, some FileManager behaviour).", sev = "low", once = true, os = ["macos", "linux", "windows"], fix = "Mostly portable; test FileManager / Bundle / URLSession behaviour on each target. FreeBSD Swift support is experimental." },
+  { id = "swift.combine", api = "import Combine", re = '^\s*import\s+(Combine|Observation)\b', msg = "Combine is Apple-only (Observation is Swift 5.9+ but tied to Apple SDKs before Swift 6).", sev = "medium", cat = "other", fix = "OpenCombine or Swift Concurrency (AsyncSequence)." },
+  { id = "swift.os-check", api = "#if os(macOS)", re = '#if\s+(os\s*\(\s*(macOS|iOS)\s*\)|canImport\s*\(\s*(AppKit|UIKit)\s*\))', msg = "Swift conditional compilation for Apple platforms.", sev = "info", fix = "Make sure an #else branch exists for Linux/Windows." },
+]
+
+# --- property lists / bundles --------------------------------------------------
+[[group]]
+lang = ["plist"]
+os = ["macos"]
+cat = "packaging"
+sev = "low"
+fix = "Keep for the macOS bundle; generate the equivalent metadata per OS (.desktop file on Linux/FreeBSD, .rc/version resource + manifest on Windows)."
+rules = [
+  { id = "plist.infoplist", api = "Info.plist", re = '<key>CFBundle(Identifier|Executable|Name)</key>', msg = "macOS/iOS bundle metadata.", once = true },
+  { id = "plist.entitlements", api = "entitlements", re = '<key>com\.apple\.(security|developer)\.[\w.\-]+</key>', msg = "Apple sandbox / hardened-runtime entitlements.", once = true, sev = "medium", fix = "No equivalent on other OSes; document required permissions (Flatpak manifest permissions on Linux)." },
+]
