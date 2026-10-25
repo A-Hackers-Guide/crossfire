@@ -23,6 +23,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: engine }
+      - name: Libraries used by the Linux test fixture
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libx11-dev
       - run: cargo test --manifest-path engine/Cargo.toml
 
   tauri:
