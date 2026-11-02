@@ -1,3 +1,5 @@
+[![Download crossfire](https://img.shields.io/sourceforge/dt/ahg-crossfire.svg?label=SourceForge%20downloads)](https://sourceforge.net/projects/ahg-crossfire/files/latest/download) [![Download crossfire](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/ahg-crossfire/files/latest/download)
+
 <p align="center">
   <img src="assets/icon.png" width="128" alt="Crossfire icon">
 </p>
