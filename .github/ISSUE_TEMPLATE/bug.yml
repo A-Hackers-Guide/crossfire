@@ -1,0 +1,70 @@
+name: Bug
+description: Something is wrong with Crossfire's behaviour.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. If you're reporting a conversion that
+        produced wrong output, please attach the `CROSSFIRE_REPORT.md` and
+        — if sharing the source project is OK — a minimal repro.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `crossfire-engine --version` (or the About dialog in the app).
+      placeholder: "crossfire 0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: host_os
+    attributes:
+      label: Host OS
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows 11
+        - Windows 10
+        - Ubuntu / Debian
+        - Arch / other Linux
+        - FreeBSD
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Which shell
+      description: Which app you were running.
+      options:
+        - Tauri app (main)
+        - Electron app (backup)
+        - Engine CLI only
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      placeholder: |
+        I ran `crossfire-engine convert < req.json` and got …
+        Expected: …
+    validations:
+      required: true
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: Smallest input / command line that shows the bug.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / `CROSSFIRE_REPORT.md`
+      description: Paste anything the tool printed. If big, attach as a file instead.
+      render: text
+    validations:
+      required: false

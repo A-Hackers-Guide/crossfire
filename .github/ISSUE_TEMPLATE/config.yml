@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussion / questions
+    url: https://github.com/A-Hackers-Guide/crossfire/discussions
+    about: Ask questions, trade porting stories, propose rough ideas before they become issues.
+  - name: Documentation
+    url: https://a-hackers-guide.github.io/crossfire/
+    about: CLI reference, rule catalog, FAQ, architecture notes.
