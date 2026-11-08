@@ -60,4 +60,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm ci --prefix ui
-      - run: npx --prefix ui tsc -b --noEmit
+      - name: Type-check
+        working-directory: ui
+        run: npx tsc -b --noEmit
