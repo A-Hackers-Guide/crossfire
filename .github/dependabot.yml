@@ -1,0 +1,70 @@
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Engine (Cargo)
+  - package-ecosystem: "cargo"
+    directory: "/engine"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust"
+    groups:
+      serde:
+        patterns: ["serde*"]
+      clap:
+        patterns: ["clap*"]
+      rustls:
+        patterns: ["rustls*", "webpki*", "tokio-rustls"]
+
+  # UI (npm)
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ui"
+    groups:
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      vite:
+        patterns: ["vite", "@vitejs/*"]
+      fonts:
+        patterns: ["@fontsource*"]
+
+  # Tauri shell
+  - package-ecosystem: "npm"
+    directory: "/apps/tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "tauri"
+
+  # Electron shell
+  - package-ecosystem: "npm"
+    directory: "/apps/electron"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "electron"
