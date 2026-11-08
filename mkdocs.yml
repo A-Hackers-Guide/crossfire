@@ -1,0 +1,65 @@
+site_name: Crossfire
+site_description: Port any project between Windows, macOS, Linux and FreeBSD. Rule-based scan, rewrite, build and test.
+site_url: https://a-hackers-guide.github.io/crossfire/
+repo_name: A-Hackers-Guide/crossfire
+repo_url: https://github.com/A-Hackers-Guide/crossfire
+copyright: Copyright © 2026 Crossfire contributors · MIT
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: pink
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: pink
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Overview: index.md
+  - Getting started:
+      - Install: install.md
+      - First port: first-port.md
+      - Target OS matrix: target-matrix.md
+  - CLI reference:
+      - crossfire-engine: cli.md
+  - Rules:
+      - Rule catalog: rules.md
+      - Writing a rule: writing-rules.md
+  - Portability shim:
+      - cf_platform.h: shim.md
+  - Build & packaging:
+      - Generated CMake + CI: build.md
+      - Toolchain detection: toolchains.md
+  - AI assistance: ai.md
+  - Architecture: architecture.md
+  - FAQ: faq.md
