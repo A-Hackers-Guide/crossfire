@@ -1,6 +1,6 @@
 # Rule catalog
 
-Crossfire's engine ships with 674 rules in nine TOML tables. Each rule carries:
+Crossfire's engine ships with 705 rules in nine TOML tables. Each rule carries:
 
 - a **regex** that matches the offending code
 - a **language scope** (C / C++ / C# / Python / Go / Rust / Java / Node / glob)

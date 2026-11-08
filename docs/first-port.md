@@ -10,7 +10,7 @@ If you already know what it targets (e.g. "Windows, DirectX 11"), say so on the 
 
 ## 2. Analyze
 
-Hit **Analyze**. The engine walks every file through 674 rules, scoring portability and tagging every OS-specific call with:
+Hit **Analyze**. The engine walks every file through 705 rules, scoring portability and tagging every OS-specific call with:
 
 - the file and line
 - the category (window, audio, graphics, registry, filesystem, threading, timing, AI, engine, …)

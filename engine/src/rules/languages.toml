@@ -278,3 +278,110 @@ rules = [
   { id = "lua.os-execute-win", api = "os.execute(cmd)", re = '''(os\.execute|io\.popen)\s*\(\s*['"](dir|del|copy|move|cls|start|mkdir |rmdir |type )''', msg = "Runs cmd.exe built-ins." },
   { id = "lua.loadlib-dll", api = "package.loadlib(.dll)", re = '''package\.loadlib\s*\(\s*['"][^'"]+\.dll['"]''', msg = "Loads a Windows DLL from Lua.", cat = "dynamicLibrary", fix = "Choose the extension per OS (.dll/.so/.dylib) or use package.cpath." },
 ]
+
+# --- Rust: platform-specific crates --------------------------------------
+[[group]]
+lang = ["rust"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Prefer std + cross-platform crates (sysinfo, dirs, which, winit, wgpu, cpal). Guard Windows-only code with #[cfg(target_os = \"windows\")]."
+rules = [
+  { id = "rust.winapi",     api = "winapi crate",       re = '^\s*(extern\s+crate\s+winapi|use\s+winapi::)', msg = "winapi crate (bindings to Win32).", fix = "Migrate to the windows-rs crate (actively maintained), or std / cross-platform wrappers." },
+  { id = "rust.windows-rs", api = "windows-rs crate",   re = '^\s*use\s+windows::(Win32|UI|Foundation|System|Storage|Devices|Graphics|Media|Networking|Security)\b', msg = "windows-rs crate.", fix = "Prefer cross-platform crates; where a Win32 call is unavoidable, feature-gate it (#[cfg(windows)])." },
+  { id = "rust.windows-sys",api = "windows-sys crate",  re = '^\s*use\s+windows_sys::(Win32|UI|Foundation|System|Storage|Devices|Graphics|Media|Networking|Security)\b', msg = "windows-sys crate (raw FFI).", fix = "Same guidance as windows-rs." },
+  { id = "rust.winres",     api = "winres build dep",   re = '^\s*winres\s*=', lang = ["toml"], msg = "winres build-dep (embed Windows .exe metadata).", cat = "build", sev = "info" },
+]
+
+[[group]]
+lang = ["rust"]
+os = ["macos"]
+cat = "other"
+sev = "high"
+fix = "Use objc2 / icrate or oxidize framework bindings; guard with #[cfg(target_os = \"macos\")]."
+rules = [
+  { id = "rust.cocoa",      api = "cocoa crate",        re = '^\s*use\s+cocoa::', msg = "cocoa crate (deprecated bindings to AppKit)." },
+  { id = "rust.core-fdn",   api = "core-foundation crate", re = '^\s*use\s+core_foundation::', msg = "core-foundation crate." },
+  { id = "rust.objc",       api = "objc / objc2 crate", re = '^\s*use\s+(objc|objc2)::', msg = "Objective-C runtime bindings." },
+  { id = "rust.io-kit",     api = "io-kit-sys / iokit", re = '^\s*use\s+(io_kit_sys|iokit)::|^\s*iokit-sys\s*=', msg = "IOKit bindings.", lang = ["rust", "toml"], cat = "input" },
+]
+
+[[group]]
+lang = ["rust"]
+os = ["linux"]
+cat = "other"
+sev = "high"
+fix = "Guard with #[cfg(target_os = \"linux\")] and provide a Windows/macOS implementation behind a trait."
+rules = [
+  { id = "rust.x11-dl",     api = "x11-dl crate",       re = '^\s*use\s+x11_dl::|^\s*x11-dl\s*=', msg = "X11 client bindings.", lang = ["rust", "toml"], cat = "windowing" },
+  { id = "rust.wayland",    api = "wayland-* crate",    re = '^\s*use\s+(wayland_client|wayland_server|wayland_protocols)::|^\s*wayland-(client|server|protocols)\s*=', msg = "Wayland client/server bindings.", lang = ["rust", "toml"], cat = "windowing" },
+  { id = "rust.evdev",      api = "evdev crate",        re = '^\s*use\s+evdev::|^\s*evdev\s*=', msg = "Linux evdev input.", lang = ["rust", "toml"], cat = "input", fix = "Use gilrs or sdl2 for portable gamepad input." },
+  { id = "rust.io-uring",   api = "io-uring crate",     re = '^\s*use\s+io_uring::|^\s*io-uring\s*=', msg = "Linux io_uring.", lang = ["rust", "toml"], cat = "networking", fix = "Use tokio (abstracts io_uring on Linux and epoll/kqueue/IOCP elsewhere)." },
+]
+
+# --- Go: platform-specific packages --------------------------------------
+[[group]]
+lang = ["go"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Prefer cross-platform packages (os/exec, net, etc.) or build-tag platform code with //go:build windows."
+rules = [
+  { id = "go.syscall-windows.lazy", api = "syscall.NewLazyDLL / MustLoadDLL", re = '\bsyscall\.(NewLazyDLL|MustLoadDLL|LazyProc|Syscall\d*)\s*[\(.]', msg = "Dynamic Win32 DLL loading via syscall package." },
+  { id = "go.x-sys-windows.svc",   api = "golang.org/x/sys/windows/svc", re = '"golang\.org/x/sys/windows/(registry|svc|mkwinsyscall|debug)"', msg = "Specific x/sys Windows subpackages (registry/svc/debug)." },
+  { id = "go.registry.setvalue",   api = "registry.Set*Value / Delete*", re = '\bregistry\.(SetStringValue|SetDWordValue|DeleteKey|DeleteValue)\b', msg = "Windows registry writes.", cat = "registry" },
+  { id = "go.windows-service", api = "svc.Run / svc.Handler", re = '\bsvc\.(Run|Interactive|IsWindowsService)\b', msg = "Windows service entry point.", cat = "process" },
+]
+
+[[group]]
+lang = ["go"]
+os = ["macos"]
+cat = "other"
+sev = "medium"
+fix = "Guard Darwin-only code with //go:build darwin and provide portable fallbacks."
+rules = [
+  { id = "go.cgo-darwin",      api = "cgo with Darwin frameworks", re = '^//#cgo\s+(CFLAGS|LDFLAGS)\s+.*(-framework|-mmacosx-version-min)\b', msg = "cgo Darwin framework flags." },
+  { id = "go.macos-notifications", api = "gon / darwin notify", re = '"github\.com/mitchellh/gon/[\w/]+"|"github\.com/deckarep/gosx-notifier"', msg = "macOS-specific Go packages." },
+]
+
+# --- Python: Windows-only stdlib and C extensions ------------------------
+[[group]]
+lang = ["python"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Guard imports with `if sys.platform == 'win32':` and provide cross-platform fallbacks."
+rules = [
+  { id = "py.winreg.setvalue", api = "winreg.SetValueEx", re = '\bwinreg\.(SetValueEx|CreateKey(Ex)?|DeleteKey|DeleteValue)\b', msg = "Windows registry writes.", cat = "registry" },
+  { id = "py.winapi",     api = "_winapi",     re = '^\s*import\s+_winapi\b|\bctypes\.windll\.(kernel32|user32|advapi32|shell32|ole32)\b', msg = "Low-level Win32 via ctypes/_winapi." },
+  { id = "py.win32com",   api = "win32com / pywin32", re = '^\s*import\s+(win32com|win32api|win32con|win32gui|pywintypes|pythoncom)\b', msg = "pywin32 / COM automation.", sev = "blocker" },
+  { id = "py.winpath",    api = "PureWindowsPath", re = '\bPureWindowsPath\s*\(|\bos\.path\.(splitunc|splitdrive)\s*\(', msg = "Windows-only pathlib / os.path helpers.", sev = "low", cat = "filesystem" },
+  { id = "py.msvcrt.getch", api = "msvcrt.getch / kbhit", re = '\bmsvcrt\.(getch|getwch|kbhit|putch)\b', msg = "msvcrt console helpers.", cat = "input" },
+  { id = "py.winsound.play", api = "winsound.PlaySound / Beep", re = '\bwinsound\.(PlaySound|Beep|MessageBeep)\b', msg = "winsound output.", cat = "audio" },
+  { id = "py.ctypes-windll", api = "ctypes.windll", re = '\bctypes\.(windll|WinDLL|OleDLL)\b', msg = "ctypes Windows DLL loading.", cat = "dynamicLibrary" },
+]
+
+# --- Node / Electron / Bun -----------------------------------------------
+[[group]]
+lang = ["node"]
+os = ["windows"]
+cat = "other"
+sev = "high"
+fix = "Guard with process.platform === 'win32' and provide fallbacks (os.homedir() instead of USERPROFILE, child_process.spawn with portable commands)."
+rules = [
+  { id = "node.node-gyp-windows", api = "node-gyp win_delay_load_hook", re = '"win_delay_load_hook"\s*:', lang = ["json"], msg = "node-gyp Windows delay-load hook.", cat = "build", sev = "info" },
+  { id = "node.windows-shortcuts", api = "windows-shortcuts package", re = 'require\s*\(\s*["\x27]windows-shortcuts["\x27]\s*\)|from\s+["\x27]windows-shortcuts["\x27]', msg = "windows-shortcuts (Windows-only)." },
+  { id = "node.registry-js",  api = "registry-js package", re = 'require\s*\(\s*["\x27]registry-js["\x27]\s*\)|from\s+["\x27]registry-js["\x27]', msg = "registry-js (Windows registry).", cat = "registry" },
+  { id = "node.shelljs",      api = "shelljs .cmd invocations", re = '\bshelljs\b.*\.(cmd|bat)\b', msg = "shelljs calling .cmd/.bat (Windows-only)." },
+]
+
+[[group]]
+lang = ["node"]
+os = ["windows", "macos", "linux", "freebsd"]
+cat = "ui"
+sev = "medium"
+fix = "Electron's platform code is portable, but remote module is removed since v14 and native menus/accelerators behave differently per OS."
+rules = [
+  { id = "node.electron-remote", api = "electron.remote", re = '\brequire\s*\(\s*["\x27]@electron/remote["\x27]\s*\)|\belectron\.remote\b', msg = "Electron @electron/remote module (removed from core in v14)." },
+  { id = "node.electron-accel-win", api = "Windows accelerators", re = '"accelerator"\s*:\s*"[^"]*\b(Ctrl|Alt|Super)\b', lang = ["json", "node"], msg = "Hard-coded Windows/Linux accelerators (macOS expects CmdOrCtrl).", sev = "low" },
+]
