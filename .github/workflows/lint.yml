@@ -1,0 +1,65 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rustfmt:
+    name: cargo fmt --check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path engine/Cargo.toml --check
+
+  clippy:
+    name: cargo clippy -D warnings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: engine }
+      - name: Libraries used by the Linux test fixture
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libx11-dev
+      - run: cargo clippy --manifest-path engine/Cargo.toml --all-targets -- -D warnings
+
+  deny:
+    name: cargo-deny (advisories, bans, licenses, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - run: cargo deny --manifest-path engine/Cargo.toml check
+
+  oxlint:
+    name: oxlint (UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci --prefix ui
+      - run: npm --prefix ui run lint
+
+  tsc:
+    name: tsc (UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci --prefix ui
+      - name: Type-check
+        working-directory: ui
+        run: npx tsc -b --noEmit

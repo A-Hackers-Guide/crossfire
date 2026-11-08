@@ -28,35 +28,383 @@ struct Spec {
 const ALL: &[Os] = &[Os::Windows, Os::Macos, Os::Linux, Os::Freebsd];
 
 const SPECS: &[Spec] = &[
-    Spec { id: "cc", name: "C compiler (cc)", exes: &["cc"], version_args: &["--version"], targets: Targets::Host, hint: ("xcode-select --install", "sudo apt install build-essential", "winget install Microsoft.VisualStudio.2022.BuildTools", "(base system)") },
-    Spec { id: "clang", name: "Clang", exes: &["clang"], version_args: &["--version"], targets: Targets::Host, hint: ("xcode-select --install", "sudo apt install clang", "winget install LLVM.LLVM", "(base system)") },
-    Spec { id: "gcc", name: "GCC", exes: &["gcc", "gcc14", "gcc13"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install gcc", "sudo apt install gcc g++", "winget install MSYS2.MSYS2", "pkg install gcc") },
-    Spec { id: "cmake", name: "CMake", exes: &["cmake"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install cmake", "sudo apt install cmake", "winget install Kitware.CMake", "pkg install cmake") },
-    Spec { id: "ninja", name: "Ninja", exes: &["ninja"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install ninja", "sudo apt install ninja-build", "winget install Ninja-build.Ninja", "pkg install ninja") },
-    Spec { id: "make", name: "Make", exes: &["gmake", "make"], version_args: &["--version"], targets: Targets::Host, hint: ("xcode-select --install", "sudo apt install make", "winget install GnuWin32.Make", "pkg install gmake") },
-    Spec { id: "meson", name: "Meson", exes: &["meson"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install meson", "sudo apt install meson", "pip install meson", "pkg install meson") },
-    Spec { id: "zig", name: "Zig (zig cc cross-compiler)", exes: &["zig"], version_args: &["version"], targets: Targets::FixedPlusHost(&[Os::Windows, Os::Linux, Os::Freebsd]), hint: ("brew install zig", "sudo snap install zig --classic", "winget install zig.zig", "pkg install zig") },
-    Spec { id: "mingw", name: "MinGW-w64 (x86_64-w64-mingw32-gcc)", exes: &["x86_64-w64-mingw32-gcc"], version_args: &["--version"], targets: Targets::Fixed(&[Os::Windows]), hint: ("brew install mingw-w64", "sudo apt install mingw-w64", "winget install MSYS2.MSYS2", "pkg install mingw-w64") },
-    Spec { id: "xcodebuild", name: "Xcode (xcodebuild)", exes: &["xcodebuild"], version_args: &["-version"], targets: Targets::Fixed(&[Os::Macos]), hint: ("Install Xcode from the App Store", "macOS only", "macOS only", "macOS only") },
-    Spec { id: "xcrun", name: "Xcode command line tools (xcrun)", exes: &["xcrun"], version_args: &["--version"], targets: Targets::Fixed(&[Os::Macos]), hint: ("xcode-select --install", "macOS only", "macOS only", "macOS only") },
-    Spec { id: "cargo", name: "Rust (cargo)", exes: &["cargo"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install rustup && rustup-init", "curl https://sh.rustup.rs -sSf | sh", "winget install Rustlang.Rustup", "pkg install rust") },
-    Spec { id: "cargo-zigbuild", name: "cargo-zigbuild", exes: &["cargo-zigbuild"], version_args: &["--version"], targets: Targets::FixedPlusHost(&[Os::Windows, Os::Linux]), hint: ("cargo install cargo-zigbuild", "cargo install cargo-zigbuild", "cargo install cargo-zigbuild", "cargo install cargo-zigbuild") },
-    Spec { id: "dotnet", name: ".NET SDK", exes: &["dotnet"], version_args: &["--version"], targets: Targets::Fixed(&[Os::Windows, Os::Macos, Os::Linux]), hint: ("brew install --cask dotnet-sdk", "sudo apt install dotnet-sdk-8.0", "winget install Microsoft.DotNet.SDK.8", "pkg install dotnet") },
-    Spec { id: "go", name: "Go", exes: &["go"], version_args: &["version"], targets: Targets::Fixed(ALL), hint: ("brew install go", "sudo apt install golang", "winget install GoLang.Go", "pkg install go") },
-    Spec { id: "java", name: "Java (JDK)", exes: &["java"], version_args: &["-version"], targets: Targets::Fixed(ALL), hint: ("brew install openjdk", "sudo apt install openjdk-21-jdk", "winget install Microsoft.OpenJDK.21", "pkg install openjdk21") },
-    Spec { id: "gradle", name: "Gradle", exes: &["gradle"], version_args: &["--version"], targets: Targets::Fixed(ALL), hint: ("brew install gradle", "sudo apt install gradle", "winget install Gradle.Gradle", "pkg install gradle") },
-    Spec { id: "maven", name: "Maven", exes: &["mvn"], version_args: &["--version"], targets: Targets::Fixed(ALL), hint: ("brew install maven", "sudo apt install maven", "winget install Apache.Maven", "pkg install maven") },
-    Spec { id: "python", name: "Python 3", exes: &["python3", "python"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install python", "sudo apt install python3", "winget install Python.Python.3.12", "pkg install python3") },
-    Spec { id: "pyinstaller", name: "PyInstaller", exes: &["pyinstaller"], version_args: &["--version"], targets: Targets::Host, hint: ("pip install pyinstaller", "pip install pyinstaller", "pip install pyinstaller", "pip install pyinstaller") },
-    Spec { id: "node", name: "Node.js", exes: &["node"], version_args: &["--version"], targets: Targets::Host, hint: ("brew install node", "sudo apt install nodejs npm", "winget install OpenJS.NodeJS.LTS", "pkg install node") },
-    Spec { id: "docker", name: "Docker", exes: &["docker"], version_args: &["--version"], targets: Targets::Fixed(&[Os::Linux]), hint: ("brew install --cask docker", "sudo apt install docker.io", "winget install Docker.DockerDesktop", "Docker is not available on FreeBSD (use jails/bhyve)") },
-    Spec { id: "podman", name: "Podman", exes: &["podman"], version_args: &["--version"], targets: Targets::Fixed(&[Os::Linux]), hint: ("brew install podman", "sudo apt install podman", "winget install RedHat.Podman", "pkg install podman") },
-    Spec { id: "godot", name: "Godot", exes: &["godot", "godot4", "Godot"], version_args: &["--version"], targets: Targets::Fixed(ALL), hint: ("brew install --cask godot", "flatpak install flathub org.godotengine.Godot", "winget install GodotEngine.GodotEngine", "pkg install godot") },
-    Spec { id: "wine", name: "Wine", exes: &["wine", "wine64"], version_args: &["--version"], targets: Targets::None, hint: ("brew install --cask wine-stable", "sudo apt install wine", "Windows runs .exe natively", "pkg install wine") },
-    Spec { id: "linuxdeploy", name: "linuxdeploy (AppImage)", exes: &["linuxdeploy", "linuxdeploy-x86_64.AppImage"], version_args: &["--version"], targets: Targets::None, hint: ("Linux only (runs in CI)", "Download from github.com/linuxdeploy/linuxdeploy/releases", "Linux only", "Linux only") },
-    Spec { id: "appimagetool", name: "appimagetool", exes: &["appimagetool", "appimagetool-x86_64.AppImage"], version_args: &["--version"], targets: Targets::None, hint: ("Linux only (runs in CI)", "Download from github.com/AppImage/appimagetool/releases", "Linux only", "Linux only") },
-    Spec { id: "makensis", name: "NSIS (makensis)", exes: &["makensis"], version_args: &["-VERSION"], targets: Targets::None, hint: ("brew install makensis", "sudo apt install nsis", "winget install NSIS.NSIS", "pkg install nsis") },
-    Spec { id: "vcpkg", name: "vcpkg", exes: &["vcpkg"], version_args: &["version"], targets: Targets::None, hint: ("brew install vcpkg", "git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh", "winget install Microsoft.vcpkg", "pkg install vcpkg") },
+    Spec {
+        id: "cc",
+        name: "C compiler (cc)",
+        exes: &["cc"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "xcode-select --install",
+            "sudo apt install build-essential",
+            "winget install Microsoft.VisualStudio.2022.BuildTools",
+            "(base system)",
+        ),
+    },
+    Spec {
+        id: "clang",
+        name: "Clang",
+        exes: &["clang"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "xcode-select --install",
+            "sudo apt install clang",
+            "winget install LLVM.LLVM",
+            "(base system)",
+        ),
+    },
+    Spec {
+        id: "gcc",
+        name: "GCC",
+        exes: &["gcc", "gcc14", "gcc13"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install gcc",
+            "sudo apt install gcc g++",
+            "winget install MSYS2.MSYS2",
+            "pkg install gcc",
+        ),
+    },
+    Spec {
+        id: "cmake",
+        name: "CMake",
+        exes: &["cmake"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install cmake",
+            "sudo apt install cmake",
+            "winget install Kitware.CMake",
+            "pkg install cmake",
+        ),
+    },
+    Spec {
+        id: "ninja",
+        name: "Ninja",
+        exes: &["ninja"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install ninja",
+            "sudo apt install ninja-build",
+            "winget install Ninja-build.Ninja",
+            "pkg install ninja",
+        ),
+    },
+    Spec {
+        id: "make",
+        name: "Make",
+        exes: &["gmake", "make"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "xcode-select --install",
+            "sudo apt install make",
+            "winget install GnuWin32.Make",
+            "pkg install gmake",
+        ),
+    },
+    Spec {
+        id: "meson",
+        name: "Meson",
+        exes: &["meson"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install meson",
+            "sudo apt install meson",
+            "pip install meson",
+            "pkg install meson",
+        ),
+    },
+    Spec {
+        id: "zig",
+        name: "Zig (zig cc cross-compiler)",
+        exes: &["zig"],
+        version_args: &["version"],
+        targets: Targets::FixedPlusHost(&[Os::Windows, Os::Linux, Os::Freebsd]),
+        hint: (
+            "brew install zig",
+            "sudo snap install zig --classic",
+            "winget install zig.zig",
+            "pkg install zig",
+        ),
+    },
+    Spec {
+        id: "mingw",
+        name: "MinGW-w64 (x86_64-w64-mingw32-gcc)",
+        exes: &["x86_64-w64-mingw32-gcc"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(&[Os::Windows]),
+        hint: (
+            "brew install mingw-w64",
+            "sudo apt install mingw-w64",
+            "winget install MSYS2.MSYS2",
+            "pkg install mingw-w64",
+        ),
+    },
+    Spec {
+        id: "xcodebuild",
+        name: "Xcode (xcodebuild)",
+        exes: &["xcodebuild"],
+        version_args: &["-version"],
+        targets: Targets::Fixed(&[Os::Macos]),
+        hint: (
+            "Install Xcode from the App Store",
+            "macOS only",
+            "macOS only",
+            "macOS only",
+        ),
+    },
+    Spec {
+        id: "xcrun",
+        name: "Xcode command line tools (xcrun)",
+        exes: &["xcrun"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(&[Os::Macos]),
+        hint: (
+            "xcode-select --install",
+            "macOS only",
+            "macOS only",
+            "macOS only",
+        ),
+    },
+    Spec {
+        id: "cargo",
+        name: "Rust (cargo)",
+        exes: &["cargo"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install rustup && rustup-init",
+            "curl https://sh.rustup.rs -sSf | sh",
+            "winget install Rustlang.Rustup",
+            "pkg install rust",
+        ),
+    },
+    Spec {
+        id: "cargo-zigbuild",
+        name: "cargo-zigbuild",
+        exes: &["cargo-zigbuild"],
+        version_args: &["--version"],
+        targets: Targets::FixedPlusHost(&[Os::Windows, Os::Linux]),
+        hint: (
+            "cargo install cargo-zigbuild",
+            "cargo install cargo-zigbuild",
+            "cargo install cargo-zigbuild",
+            "cargo install cargo-zigbuild",
+        ),
+    },
+    Spec {
+        id: "dotnet",
+        name: ".NET SDK",
+        exes: &["dotnet"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(&[Os::Windows, Os::Macos, Os::Linux]),
+        hint: (
+            "brew install --cask dotnet-sdk",
+            "sudo apt install dotnet-sdk-8.0",
+            "winget install Microsoft.DotNet.SDK.8",
+            "pkg install dotnet",
+        ),
+    },
+    Spec {
+        id: "go",
+        name: "Go",
+        exes: &["go"],
+        version_args: &["version"],
+        targets: Targets::Fixed(ALL),
+        hint: (
+            "brew install go",
+            "sudo apt install golang",
+            "winget install GoLang.Go",
+            "pkg install go",
+        ),
+    },
+    Spec {
+        id: "java",
+        name: "Java (JDK)",
+        exes: &["java"],
+        version_args: &["-version"],
+        targets: Targets::Fixed(ALL),
+        hint: (
+            "brew install openjdk",
+            "sudo apt install openjdk-21-jdk",
+            "winget install Microsoft.OpenJDK.21",
+            "pkg install openjdk21",
+        ),
+    },
+    Spec {
+        id: "gradle",
+        name: "Gradle",
+        exes: &["gradle"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(ALL),
+        hint: (
+            "brew install gradle",
+            "sudo apt install gradle",
+            "winget install Gradle.Gradle",
+            "pkg install gradle",
+        ),
+    },
+    Spec {
+        id: "maven",
+        name: "Maven",
+        exes: &["mvn"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(ALL),
+        hint: (
+            "brew install maven",
+            "sudo apt install maven",
+            "winget install Apache.Maven",
+            "pkg install maven",
+        ),
+    },
+    Spec {
+        id: "python",
+        name: "Python 3",
+        exes: &["python3", "python"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install python",
+            "sudo apt install python3",
+            "winget install Python.Python.3.12",
+            "pkg install python3",
+        ),
+    },
+    Spec {
+        id: "pyinstaller",
+        name: "PyInstaller",
+        exes: &["pyinstaller"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "pip install pyinstaller",
+            "pip install pyinstaller",
+            "pip install pyinstaller",
+            "pip install pyinstaller",
+        ),
+    },
+    Spec {
+        id: "node",
+        name: "Node.js",
+        exes: &["node"],
+        version_args: &["--version"],
+        targets: Targets::Host,
+        hint: (
+            "brew install node",
+            "sudo apt install nodejs npm",
+            "winget install OpenJS.NodeJS.LTS",
+            "pkg install node",
+        ),
+    },
+    Spec {
+        id: "docker",
+        name: "Docker",
+        exes: &["docker"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(&[Os::Linux]),
+        hint: (
+            "brew install --cask docker",
+            "sudo apt install docker.io",
+            "winget install Docker.DockerDesktop",
+            "Docker is not available on FreeBSD (use jails/bhyve)",
+        ),
+    },
+    Spec {
+        id: "podman",
+        name: "Podman",
+        exes: &["podman"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(&[Os::Linux]),
+        hint: (
+            "brew install podman",
+            "sudo apt install podman",
+            "winget install RedHat.Podman",
+            "pkg install podman",
+        ),
+    },
+    Spec {
+        id: "godot",
+        name: "Godot",
+        exes: &["godot", "godot4", "Godot"],
+        version_args: &["--version"],
+        targets: Targets::Fixed(ALL),
+        hint: (
+            "brew install --cask godot",
+            "flatpak install flathub org.godotengine.Godot",
+            "winget install GodotEngine.GodotEngine",
+            "pkg install godot",
+        ),
+    },
+    Spec {
+        id: "wine",
+        name: "Wine",
+        exes: &["wine", "wine64"],
+        version_args: &["--version"],
+        targets: Targets::None,
+        hint: (
+            "brew install --cask wine-stable",
+            "sudo apt install wine",
+            "Windows runs .exe natively",
+            "pkg install wine",
+        ),
+    },
+    Spec {
+        id: "linuxdeploy",
+        name: "linuxdeploy (AppImage)",
+        exes: &["linuxdeploy", "linuxdeploy-x86_64.AppImage"],
+        version_args: &["--version"],
+        targets: Targets::None,
+        hint: (
+            "Linux only (runs in CI)",
+            "Download from github.com/linuxdeploy/linuxdeploy/releases",
+            "Linux only",
+            "Linux only",
+        ),
+    },
+    Spec {
+        id: "appimagetool",
+        name: "appimagetool",
+        exes: &["appimagetool", "appimagetool-x86_64.AppImage"],
+        version_args: &["--version"],
+        targets: Targets::None,
+        hint: (
+            "Linux only (runs in CI)",
+            "Download from github.com/AppImage/appimagetool/releases",
+            "Linux only",
+            "Linux only",
+        ),
+    },
+    Spec {
+        id: "makensis",
+        name: "NSIS (makensis)",
+        exes: &["makensis"],
+        version_args: &["-VERSION"],
+        targets: Targets::None,
+        hint: (
+            "brew install makensis",
+            "sudo apt install nsis",
+            "winget install NSIS.NSIS",
+            "pkg install nsis",
+        ),
+    },
+    Spec {
+        id: "vcpkg",
+        name: "vcpkg",
+        exes: &["vcpkg"],
+        version_args: &["version"],
+        targets: Targets::None,
+        hint: (
+            "brew install vcpkg",
+            "git clone https://github.com/microsoft/vcpkg && ./vcpkg/bootstrap-vcpkg.sh",
+            "winget install Microsoft.vcpkg",
+            "pkg install vcpkg",
+        ),
+    },
 ];
 
 fn hint_for_host(h: &(&str, &str, &str, &str)) -> String {
@@ -94,7 +442,15 @@ const NO_EXEC: &[&str] = &["wine", "godot"];
 
 /// Command-line tools that are stubs on macOS until the Xcode Command Line
 /// Tools are installed (running a stub pops up an installer dialog).
-const MAC_CLT_STUBS: &[&str] = &["cc", "clang", "gcc", "make", "python", "xcrun", "xcodebuild"];
+const MAC_CLT_STUBS: &[&str] = &[
+    "cc",
+    "clang",
+    "gcc",
+    "make",
+    "python",
+    "xcrun",
+    "xcodebuild",
+];
 
 /// Version of a tool without side effects: bundle binaries (including
 /// symlinks into an .app) are read from Info.plist, GUI-ish tools are not run,
@@ -108,13 +464,16 @@ fn safe_version(spec: &Spec, p: &Path) -> Option<String> {
         return None;
     }
     if cfg!(target_os = "macos") && real.starts_with("/usr/bin") {
-        let clt = Path::new("/Library/Developer/CommandLineTools/usr/bin").is_dir() || Path::new("/Applications/Xcode.app").is_dir();
+        let clt = Path::new("/Library/Developer/CommandLineTools/usr/bin").is_dir()
+            || Path::new("/Applications/Xcode.app").is_dir();
         if MAC_CLT_STUBS.contains(&spec.id) && !clt {
             return None;
         }
         if spec.id == "java" {
             let has_jdk = std::env::var_os("JAVA_HOME").is_some()
-                || std::fs::read_dir("/Library/Java/JavaVirtualMachines").map(|mut d| d.next().is_some()).unwrap_or(false);
+                || std::fs::read_dir("/Library/Java/JavaVirtualMachines")
+                    .map(|mut d| d.next().is_some())
+                    .unwrap_or(false);
             if !has_jdk {
                 return None;
             }
@@ -155,10 +514,22 @@ fn triple_os(t: &str) -> Option<Os> {
 
 /// Installed rustup targets (triples).
 pub fn rustup_targets() -> Vec<String> {
-    let Some(rustup) = which("rustup") else { return vec![] };
-    capture(&rustup, &["target", "list", "--installed"], Duration::from_secs(15))
-        .map(|(_, out)| out.lines().map(str::trim).filter(|l| !l.is_empty() && !l.contains(' ')).map(String::from).collect())
-        .unwrap_or_default()
+    let Some(rustup) = which("rustup") else {
+        return vec![];
+    };
+    capture(
+        &rustup,
+        &["target", "list", "--installed"],
+        Duration::from_secs(15),
+    )
+    .map(|(_, out)| {
+        out.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.contains(' '))
+            .map(String::from)
+            .collect()
+    })
+    .unwrap_or_default()
 }
 
 /// Game Porting Toolkit's wine binary, when installed.
@@ -186,7 +557,8 @@ fn msvc() -> Toolchain {
         hint: if Os::host() == Os::Windows {
             "winget install Microsoft.VisualStudio.2022.BuildTools --override \"--add Microsoft.VisualStudio.Workload.VCTools\"".into()
         } else {
-            "Windows only — build Windows targets with zig/mingw locally or in CI (windows-latest)".into()
+            "Windows only — build Windows targets with zig/mingw locally or in CI (windows-latest)"
+                .into()
         },
     };
     if Os::host() != Os::Windows {
@@ -196,16 +568,33 @@ fn msvc() -> Toolchain {
         tc.found = true;
         tc.path = Some(cl.to_string_lossy().to_string());
     } else {
-        let pf = std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| "C:\\Program Files (x86)".into());
+        let pf =
+            std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| "C:\\Program Files (x86)".into());
         let vswhere = PathBuf::from(pf).join("Microsoft Visual Studio\\Installer\\vswhere.exe");
         if vswhere.is_file() {
-            if let Some((_, out)) = capture(&vswhere, &["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], Duration::from_secs(15)) {
+            if let Some((_, out)) = capture(
+                &vswhere,
+                &[
+                    "-latest",
+                    "-products",
+                    "*",
+                    "-requires",
+                    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                    "-property",
+                    "installationPath",
+                ],
+                Duration::from_secs(15),
+            ) {
                 let inst = out.lines().next().unwrap_or("").trim().to_string();
                 if !inst.is_empty() {
                     tc.found = true;
                     tc.path = Some(inst.clone());
-                    tc.version = capture(&vswhere, &["-latest", "-property", "catalog_productDisplayVersion"], Duration::from_secs(15))
-                        .map(|(_, v)| v.trim().to_string());
+                    tc.version = capture(
+                        &vswhere,
+                        &["-latest", "-property", "catalog_productDisplayVersion"],
+                        Duration::from_secs(15),
+                    )
+                    .map(|(_, v)| v.trim().to_string());
                 }
             }
         }
@@ -253,10 +642,24 @@ pub fn toolchains() -> Vec<Toolchain> {
         },
     });
     for (id, name, app, hint) in [
-        ("unity", "Unity Hub", unity_hub(), "Install Unity Hub from unity.com/download (exports Windows/macOS/Linux)"),
-        ("crossover", "CrossOver", mac_app("CrossOver.app"), "codeweavers.com/crossover (commercial Wine for macOS/Linux)"),
+        (
+            "unity",
+            "Unity Hub",
+            unity_hub(),
+            "Install Unity Hub from unity.com/download (exports Windows/macOS/Linux)",
+        ),
+        (
+            "crossover",
+            "CrossOver",
+            mac_app("CrossOver.app"),
+            "codeweavers.com/crossover (commercial Wine for macOS/Linux)",
+        ),
     ] {
-        let targets = if id == "unity" && app.is_some() { vec![Os::Windows, Os::Macos, Os::Linux] } else { vec![] };
+        let targets = if id == "unity" && app.is_some() {
+            vec![Os::Windows, Os::Macos, Os::Linux]
+        } else {
+            vec![]
+        };
         out.push(Toolchain {
             id: id.into(),
             name: name.into(),
@@ -288,7 +691,9 @@ fn unity_hub() -> Option<PathBuf> {
 
 /// Read CFBundleShortVersionString from the .app bundle that contains `exe`, without running it.
 fn bundle_version(exe: &Path) -> Option<String> {
-    let contents = exe.ancestors().find(|a| a.file_name().is_some_and(|n| n == "Contents"))?;
+    let contents = exe
+        .ancestors()
+        .find(|a| a.file_name().is_some_and(|n| n == "Contents"))?;
     let plist = std::fs::read_to_string(contents.join("Info.plist")).ok()?;
     let key = plist.find("<key>CFBundleShortVersionString</key>")?;
     let rest = &plist[key..];
@@ -316,7 +721,10 @@ mod tests {
         assert!(t.iter().any(|x| x.id == "cmake"));
         assert!(t.iter().all(|x| !x.hint.is_empty()));
         // A found compiler can always build for the host.
-        for x in t.iter().filter(|x| x.found && (x.id == "cc" || x.id == "clang")) {
+        for x in t
+            .iter()
+            .filter(|x| x.found && (x.id == "cc" || x.id == "clang"))
+        {
             assert!(x.targets.contains(&Os::host()));
         }
     }

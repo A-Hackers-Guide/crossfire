@@ -42,7 +42,9 @@ pub fn classify(path: &Path) -> Option<Lang> {
         "c" => l("c", "C", true),
         "h" => l("h", "C/C++ Header", true),
         "cpp" | "cc" | "cxx" | "c++" | "cp" => l("cpp", "C++", true),
-        "hpp" | "hh" | "hxx" | "h++" | "inl" | "ipp" | "tpp" | "ixx" | "cppm" => l("cpp", "C++", true),
+        "hpp" | "hh" | "hxx" | "h++" | "inl" | "ipp" | "tpp" | "ixx" | "cppm" => {
+            l("cpp", "C++", true)
+        }
         "m" => l("objc", "Objective-C", true),
         "mm" => l("objcpp", "Objective-C++", true),
         "swift" => l("swift", "Swift", true),
@@ -88,7 +90,9 @@ pub fn classify(path: &Path) -> Option<Lang> {
         "rc" => l("winrc", "Windows Resource", false),
         "def" => l("winrc", "Module definition", false),
         "manifest" => l("winrc", "Windows manifest", false),
-        "json" | "toml" | "yaml" | "yml" | "ini" | "cfg" | "conf" | "xml" => l("manifest", "Config", false),
+        "json" | "toml" | "yaml" | "yml" | "ini" | "cfg" | "conf" | "xml" => {
+            l("manifest", "Config", false)
+        }
         "desktop" => l("manifest", "Desktop entry", false),
         "uproject" | "uplugin" => l("manifest", "Unreal descriptor", false),
         "pro" | "pri" => l("qmake", "qmake", false),
@@ -107,7 +111,9 @@ pub fn expand_token(tok: &str) -> Vec<&'static str> {
         "dotnet" => vec!["csharp", "fsharp", "vbnet"],
         "shaders" => vec!["hlsl", "glsl", "msl", "wgsl"],
         "scripts" => vec!["shell", "batch", "powershell"],
-        "buildfiles" => vec!["cmake", "make", "meson", "msbuild", "xcode", "gradle", "qmake"],
+        "buildfiles" => vec![
+            "cmake", "make", "meson", "msbuild", "xcode", "gradle", "qmake",
+        ],
         other => vec![leak(other)],
     }
 }

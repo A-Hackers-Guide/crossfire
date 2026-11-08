@@ -126,14 +126,19 @@ fn load() -> anyhow::Result<Vec<Rule>> {
                     .flat_map(|t| lang::expand_token(t))
                     .collect();
                 let os = r.os.clone().unwrap_or_else(|| g.os.clone());
-                let pattern = if r.icase { format!("(?i){}", r.re) } else { r.re.clone() };
+                let pattern = if r.icase {
+                    format!("(?i){}", r.re)
+                } else {
+                    r.re.clone()
+                };
                 let re = RegexBuilder::new(&pattern)
                     .size_limit(16 << 20)
                     .build()
                     .map_err(|e| anyhow::anyhow!("rule {}: bad regex: {e}", r.id))?;
                 let not = match &r.not {
                     Some(n) => Some(
-                        Regex::new(n).map_err(|e| anyhow::anyhow!("rule {}: bad not: {e}", r.id))?,
+                        Regex::new(n)
+                            .map_err(|e| anyhow::anyhow!("rule {}: bad not: {e}", r.id))?,
                     ),
                     None => None,
                 };
@@ -178,7 +183,11 @@ fn build_suggestions(os: &[Os], fix: Option<&str>, r: &RawRule) -> BTreeMap<Os, 
             if os.len() == Os::ALL.len() {
                 fix.map(str::to_string)
             } else {
-                Some(format!("Native on {}; keep it behind a platform guard ({}).", target.label(), target.c_macro()))
+                Some(format!(
+                    "Native on {}; keep it behind a platform guard ({}).",
+                    target.label(),
+                    target.c_macro()
+                ))
             }
         } else {
             fix.map(str::to_string)
@@ -202,11 +211,20 @@ fn macro_os(cond: &str) -> Vec<Os> {
     let mut v = Vec::new();
     for m in RE.find_iter(cond) {
         let add: &[Os] = match m.as_str() {
-            "_WIN32" | "_WIN64" | "WIN32" | "_WINDOWS" | "_MSC_VER" | "__MINGW32__" | "__MINGW64__"
-            | "__CYGWIN__" | "SDL_PLATFORM_WINDOWS" => &[Os::Windows],
+            "_WIN32"
+            | "_WIN64"
+            | "WIN32"
+            | "_WINDOWS"
+            | "_MSC_VER"
+            | "__MINGW32__"
+            | "__MINGW64__"
+            | "__CYGWIN__"
+            | "SDL_PLATFORM_WINDOWS" => &[Os::Windows],
             "__APPLE__" | "__MACH__" | "TARGET_OS_OSX" | "TARGET_OS_MAC" | "TARGET_OS_IPHONE"
             | "SDL_PLATFORM_MACOS" => &[Os::Macos],
-            "__linux__" | "__linux" | "__gnu_linux__" | "__ANDROID__" | "SDL_PLATFORM_LINUX" => &[Os::Linux],
+            "__linux__" | "__linux" | "__gnu_linux__" | "__ANDROID__" | "SDL_PLATFORM_LINUX" => {
+                &[Os::Linux]
+            }
             "__FreeBSD__" | "__DragonFly__" | "SDL_PLATFORM_FREEBSD" => &[Os::Freebsd],
             // __unix__ is defined on Linux and the BSDs but not on macOS.
             "__unix__" | "__unix" => &[Os::Linux, Os::Freebsd],
@@ -252,10 +270,20 @@ pub fn guard_map(text: &str) -> Vec<Option<Vec<Os>>> {
                     let oses = macro_os(rest);
                     let negated = kw == "ifndef" || rest.trim_start().starts_with('!');
                     if oses.is_empty() {
-                        stack.push(Frame { allowed: None, named: None });
+                        stack.push(Frame {
+                            allowed: None,
+                            named: None,
+                        });
                     } else {
-                        let allowed = if negated { complement(&oses) } else { oses.clone() };
-                        stack.push(Frame { allowed: Some(allowed), named: Some((oses, negated)) });
+                        let allowed = if negated {
+                            complement(&oses)
+                        } else {
+                            oses.clone()
+                        };
+                        stack.push(Frame {
+                            allowed: Some(allowed),
+                            named: Some((oses, negated)),
+                        });
                     }
                 }
                 "elif" => {
@@ -263,12 +291,23 @@ pub fn guard_map(text: &str) -> Vec<Option<Vec<Os>>> {
                         let oses = macro_os(rest);
                         if oses.is_empty() {
                             // Unknown elif: whatever wasn't taken before.
-                            f.allowed = f.named.as_ref().map(|(o, n)| if *n { o.clone() } else { complement(o) });
+                            f.allowed =
+                                f.named
+                                    .as_ref()
+                                    .map(|(o, n)| if *n { o.clone() } else { complement(o) });
                         } else {
                             let negated = rest.trim_start().starts_with('!');
-                            f.allowed = Some(if negated { complement(&oses) } else { oses.clone() });
+                            f.allowed = Some(if negated {
+                                complement(&oses)
+                            } else {
+                                oses.clone()
+                            });
                             // Accumulate what has been "used" for a later #else.
-                            let prev = f.named.take().map(|(o, n)| if n { complement(&o) } else { o }).unwrap_or_default();
+                            let prev = f
+                                .named
+                                .take()
+                                .map(|(o, n)| if n { complement(&o) } else { o })
+                                .unwrap_or_default();
                             let mut used = prev;
                             for o in f.allowed.clone().unwrap_or_default() {
                                 if !used.contains(&o) {
@@ -281,7 +320,10 @@ pub fn guard_map(text: &str) -> Vec<Option<Vec<Os>>> {
                 }
                 "else" => {
                     if let Some(f) = stack.last_mut() {
-                        f.allowed = f.named.as_ref().map(|(o, n)| if *n { o.clone() } else { complement(o) });
+                        f.allowed =
+                            f.named
+                                .as_ref()
+                                .map(|(o, n)| if *n { o.clone() } else { complement(o) });
                     }
                 }
                 "endif" => {
@@ -321,7 +363,8 @@ struct LangRules {
 fn lang_rules(lang_id: &str) -> std::sync::Arc<LangRules> {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
-    static CACHE: LazyLock<Mutex<HashMap<String, Arc<LangRules>>>> = LazyLock::new(Default::default);
+    static CACHE: LazyLock<Mutex<HashMap<String, Arc<LangRules>>>> =
+        LazyLock::new(Default::default);
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(lr) = cache.get(lang_id) {
         return lr.clone();
@@ -351,7 +394,9 @@ pub fn is_comment(lang_id: &str, line: &str) -> bool {
     if lang_id == "python" && t.starts_with("#!") {
         return true;
     }
-    lang::comment_prefixes(lang_id).iter().any(|p| t.starts_with(p))
+    lang::comment_prefixes(lang_id)
+        .iter()
+        .any(|p| t.starts_with(p))
 }
 
 /// Apply all rules to one file. `rel` is the path shown in findings.
@@ -362,7 +407,11 @@ pub fn scan_text(rel: &str, lang_id: &str, text: &str) -> Vec<Finding> {
         return Vec::new();
     }
     let applicable: Vec<&Rule> = lr.rules.iter().map(|&i| &rules()[i]).collect();
-    let guards = if lang::is_c_family(lang_id) { guard_map(text) } else { Vec::new() };
+    let guards = if lang::is_c_family(lang_id) {
+        guard_map(text)
+    } else {
+        Vec::new()
+    };
     let mut counts = vec![0usize; applicable.len()];
     let mut out = Vec::new();
     for (idx, line) in text.lines().enumerate() {
@@ -377,7 +426,10 @@ pub fn scan_text(rel: &str, lang_id: &str, text: &str) -> Vec<Finding> {
         let comment = is_comment(lang_id, line);
         for ri in hits.iter() {
             let rule = applicable[ri];
-            if (comment && !rule.comments) || counts[ri] >= PER_RULE_FILE_CAP || (rule.once && counts[ri] > 0) {
+            if (comment && !rule.comments)
+                || counts[ri] >= PER_RULE_FILE_CAP
+                || (rule.once && counts[ri] > 0)
+            {
                 continue;
             }
             if let Some(n) = &rule.not {
@@ -390,7 +442,10 @@ pub fn scan_text(rel: &str, lang_id: &str, text: &str) -> Vec<Finding> {
             let mut message = rule.message.clone();
             // Already guarded for the OS(es) this API belongs to → informational.
             if let Some(Some(allowed)) = guards.get(idx) {
-                if !allowed.is_empty() && allowed.iter().all(|o| rule.os.contains(o)) && rule.os.len() < 4 {
+                if !allowed.is_empty()
+                    && allowed.iter().all(|o| rule.os.contains(o))
+                    && rule.os.len() < 4
+                {
                     severity = Severity::Info;
                     message.push_str(" (already behind a platform #if guard)");
                 }
@@ -461,7 +516,9 @@ mod tests {
         assert!(apis.contains(&"windows.h"), "{apis:?}");
         assert!(apis.contains(&"Sleep"), "{apis:?}");
         assert!(apis.contains(&"GetTickCount"), "{apis:?}");
-        assert!(f.iter().all(|x| x.os.contains(&Os::Windows) || x.os.len() == 4));
+        assert!(f
+            .iter()
+            .all(|x| x.os.contains(&Os::Windows) || x.os.len() == 4));
     }
 
     #[test]
@@ -477,7 +534,11 @@ mod tests {
         let sleep = f.iter().find(|x| x.api == "Sleep").expect("Sleep finding");
         assert_eq!(sleep.severity, Severity::Info);
         if let Some(u) = f.iter().find(|x| x.api == "usleep") {
-            assert_eq!(u.severity, Severity::Info, "usleep is in the non-Windows branch");
+            assert_eq!(
+                u.severity,
+                Severity::Info,
+                "usleep is in the non-Windows branch"
+            );
         }
     }
 
@@ -493,9 +554,17 @@ mod tests {
 
     #[test]
     fn linux_only_ifdef_flags_freebsd_gap() {
-        let f = scan_text("a.c", "c", "#ifdef __linux__\n#include <sys/epoll.h>\n#endif\n");
+        let f = scan_text(
+            "a.c",
+            "c",
+            "#ifdef __linux__\n#include <sys/epoll.h>\n#endif\n",
+        );
         assert!(f.iter().any(|x| x.id == "bsd.linux-only-ifdef"), "{f:?}");
-        let g = scan_text("a.c", "c", "#if defined(__linux__) || defined(__FreeBSD__)\n#endif\n");
+        let g = scan_text(
+            "a.c",
+            "c",
+            "#if defined(__linux__) || defined(__FreeBSD__)\n#endif\n",
+        );
         assert!(!g.iter().any(|x| x.id == "bsd.linux-only-ifdef"));
     }
 
@@ -504,12 +573,26 @@ mod tests {
         let py = scan_text("a.py", "python", "import winreg\nos.startfile('x')\n");
         assert!(py.iter().any(|x| x.api == "winreg"));
         assert!(py.iter().any(|x| x.api == "os.startfile"));
-        let cs = scan_text("a.cs", "csharp", "[DllImport(\"user32.dll\")]\nusing System.Windows.Forms;\n");
+        let cs = scan_text(
+            "a.cs",
+            "csharp",
+            "[DllImport(\"user32.dll\")]\nusing System.Windows.Forms;\n",
+        );
         assert!(cs.iter().any(|x| x.api.contains("user32")));
         assert!(cs.iter().any(|x| x.api.contains("WinForms")));
-        let objc = scan_text("a.m", "objc", "#import <Cocoa/Cocoa.h>\nid<MTLDevice> d = MTLCreateSystemDefaultDevice();\n");
-        assert!(objc.iter().any(|x| x.os == vec![Os::Macos] && x.category == Category::Graphics));
-        let x11 = scan_text("w.c", "c", "#include <X11/Xlib.h>\nDisplay *d = XOpenDisplay(NULL);\n");
+        let objc = scan_text(
+            "a.m",
+            "objc",
+            "#import <Cocoa/Cocoa.h>\nid<MTLDevice> d = MTLCreateSystemDefaultDevice();\n",
+        );
+        assert!(objc
+            .iter()
+            .any(|x| x.os == vec![Os::Macos] && x.category == Category::Graphics));
+        let x11 = scan_text(
+            "w.c",
+            "c",
+            "#include <X11/Xlib.h>\nDisplay *d = XOpenDisplay(NULL);\n",
+        );
         assert!(x11.iter().any(|x| x.api == "XOpenDisplay"));
     }
 

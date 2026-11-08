@@ -35,34 +35,85 @@ pub fn up_prefix(rel: &str) -> String {
 
 /// Headers that only exist on Windows and are superseded by cf_platform.h elsewhere.
 const WIN_HEADERS: &[&str] = &[
-    "windows.h", "windowsx.h", "tchar.h", "conio.h", "io.h", "direct.h", "process.h", "mmsystem.h",
-    "timeapi.h", "winsock2.h", "winsock.h", "ws2tcpip.h", "mswsock.h", "shlobj.h", "shlobj_core.h",
-    "shellapi.h", "shlwapi.h", "intrin.h", "objbase.h", "combaseapi.h", "versionhelpers.h",
-    "d3d9.h", "d3d10.h", "d3d10_1.h", "d3d11.h", "d3d11_1.h", "d3d12.h", "dxgi.h", "dxgi1_2.h",
-    "dxgi1_4.h", "dxgi1_6.h", "d3dcompiler.h", "xinput.h", "dinput.h", "dsound.h", "xaudio2.h",
-    "directxmath.h", "wrl.h", "wrl/client.h", "commctrl.h", "commdlg.h", "dbghelp.h", "malloc.h",
-    "basetsd.h", "crtdbg.h",
+    "windows.h",
+    "windowsx.h",
+    "tchar.h",
+    "conio.h",
+    "io.h",
+    "direct.h",
+    "process.h",
+    "mmsystem.h",
+    "timeapi.h",
+    "winsock2.h",
+    "winsock.h",
+    "ws2tcpip.h",
+    "mswsock.h",
+    "shlobj.h",
+    "shlobj_core.h",
+    "shellapi.h",
+    "shlwapi.h",
+    "intrin.h",
+    "objbase.h",
+    "combaseapi.h",
+    "versionhelpers.h",
+    "d3d9.h",
+    "d3d10.h",
+    "d3d10_1.h",
+    "d3d11.h",
+    "d3d11_1.h",
+    "d3d12.h",
+    "dxgi.h",
+    "dxgi1_2.h",
+    "dxgi1_4.h",
+    "dxgi1_6.h",
+    "d3dcompiler.h",
+    "xinput.h",
+    "dinput.h",
+    "dsound.h",
+    "xaudio2.h",
+    "directxmath.h",
+    "wrl.h",
+    "wrl/client.h",
+    "commctrl.h",
+    "commdlg.h",
+    "dbghelp.h",
+    "malloc.h",
+    "basetsd.h",
+    "crtdbg.h",
 ];
 /// POSIX headers cf_platform.h replaces when compiling with MSVC.
 const POSIX_SHIMMED: &[&str] = &["unistd.h", "strings.h", "sys/time.h"];
 
-static INCLUDE: LazyLock<Regex> = LazyLock::new(|| re(r#"^(\s*#\s*include\s*)([<"])([^>"]+)([>"])(.*)$"#));
-static PRAGMA_MSVC: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*#\s*pragma\s+(comment\s*\(\s*lib|warning\s*\()"));
+static INCLUDE: LazyLock<Regex> =
+    LazyLock::new(|| re(r#"^(\s*#\s*include\s*)([<"])([^>"]+)([>"])(.*)$"#));
+static PRAGMA_MSVC: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^\s*#\s*pragma\s+(comment\s*\(\s*lib|warning\s*\()"));
 static SLEEP: LazyLock<Regex> = LazyLock::new(|| re(r"(^|[^\w:.>])Sleep\s*\("));
 static TICKS: LazyLock<Regex> = LazyLock::new(|| re(r"(^|[^\w:.>])GetTickCount(64)?\s*\(\s*\)"));
-static STRICMP: LazyLock<Regex> = LazyLock::new(|| re(r"(^|[^\w:.>])_?(stricmp|strnicmp|_stricmp|_strnicmp)\s*\("));
-static STRCASECMP: LazyLock<Regex> = LazyLock::new(|| re(r"(^|[^\w:.>])(strcasecmp|strncasecmp)\s*\("));
+static STRICMP: LazyLock<Regex> =
+    LazyLock::new(|| re(r"(^|[^\w:.>])_?(stricmp|strnicmp|_stricmp|_strnicmp)\s*\("));
+static STRCASECMP: LazyLock<Regex> =
+    LazyLock::new(|| re(r"(^|[^\w:.>])(strcasecmp|strncasecmp)\s*\("));
 static SNPRINTF: LazyLock<Regex> = LazyLock::new(|| re(r"(^|[^\w:.>])_(snprintf|vsnprintf)\s*\("));
 static USLEEP: LazyLock<Regex> = LazyLock::new(|| re(r"(^|[^\w:.>])usleep\s*\("));
-static DECLSPEC: LazyLock<Regex> = LazyLock::new(|| re(r"__declspec\s*\(\s*(dllexport|dllimport|noinline|noreturn|thread|align\s*\(\s*(\d+)\s*\))\s*\)"));
+static DECLSPEC: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r"__declspec\s*\(\s*(dllexport|dllimport|noinline|noreturn|thread|align\s*\(\s*(\d+)\s*\))\s*\)",
+    )
+});
 static FORCEINLINE: LazyLock<Regex> = LazyLock::new(|| re(r"\b__forceinline\b"));
-static GETENV: LazyLock<Regex> = LazyLock::new(|| re(r#"\b(getenv|_wgetenv)\s*\(\s*L?"(APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)"\s*\)"#));
-static PROC_EXE: LazyLock<Regex> = LazyLock::new(|| re(r#"\breadlink\s*\(\s*"/proc/self/exe"\s*,\s*"#));
-static ZEROMEM: LazyLock<Regex> = LazyLock::new(|| re(r"\b(ZeroMemory|SecureZeroMemory)\s*\(([^,()]+),"));
+static GETENV: LazyLock<Regex> = LazyLock::new(|| {
+    re(r#"\b(getenv|_wgetenv)\s*\(\s*L?"(APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)"\s*\)"#)
+});
+static PROC_EXE: LazyLock<Regex> =
+    LazyLock::new(|| re(r#"\breadlink\s*\(\s*"/proc/self/exe"\s*,\s*"#));
+static ZEROMEM: LazyLock<Regex> =
+    LazyLock::new(|| re(r"\b(ZeroMemory|SecureZeroMemory)\s*\(([^,()]+),"));
 static COPYMEM: LazyLock<Regex> = LazyLock::new(|| re(r"\b(CopyMemory|MoveMemory)\s*\("));
 static DEBUGSTR: LazyLock<Regex> = LazyLock::new(|| re(r"\bOutputDebugString[A]?\s*\("));
 /// "dir\\file.ext" string literal (escaped backslashes between plain segments).
-static BACKSLASH_C: LazyLock<Regex> = LazyLock::new(|| re(r#""([A-Za-z0-9_.\-]+(?:\\\\[A-Za-z0-9_.\-]+)+)""#));
+static BACKSLASH_C: LazyLock<Regex> =
+    LazyLock::new(|| re(r#""([A-Za-z0-9_.\-]+(?:\\\\[A-Za-z0-9_.\-]+)+)""#));
 
 fn is_cpp(lang_id: &str) -> bool {
     matches!(lang_id, "cpp" | "objcpp")
@@ -87,8 +138,14 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
 
     for (idx, line) in text.lines().enumerate() {
         let g = guards.get(idx).cloned().flatten();
-        let win_only = g.as_ref().map(|a| !a.is_empty() && a.iter().all(|o| *o == Os::Windows)).unwrap_or(false);
-        let posix_only = g.as_ref().map(|a| !a.is_empty() && !a.contains(&Os::Windows)).unwrap_or(false);
+        let win_only = g
+            .as_ref()
+            .map(|a| !a.is_empty() && a.iter().all(|o| *o == Os::Windows))
+            .unwrap_or(false);
+        let posix_only = g
+            .as_ref()
+            .map(|a| !a.is_empty() && !a.contains(&Os::Windows))
+            .unwrap_or(false);
         let trimmed = line.trim_start();
 
         // Track /* ... */ blocks so we do not rewrite commented-out code.
@@ -122,10 +179,14 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
                 // MinGW and cross toolchains ship lower-case header names.
                 out.push(format!("{}{}{}{}{}", &c[1], &c[2], lower, &c[4], &c[5]));
                 out.push("#endif".into());
-                note(format!("Wrapped <{header}> in #ifdef _WIN32 and included cf_platform.h"), &mut notes);
+                note(
+                    format!("Wrapped <{header}> in #ifdef _WIN32 and included cf_platform.h"),
+                    &mut notes,
+                );
                 continue;
             }
-            if to_windows && POSIX_SHIMMED.contains(&lower.as_str()) && c[2].eq("<") && !posix_only {
+            if to_windows && POSIX_SHIMMED.contains(&lower.as_str()) && c[2].eq("<") && !posix_only
+            {
                 if !has_shim {
                     out.push(format!("#include \"{shim_path}\""));
                     has_shim = true;
@@ -133,20 +194,29 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
                 out.push("#ifndef _WIN32".into());
                 out.push(line.to_string());
                 out.push("#endif".into());
-                note(format!("Wrapped <{header}> in #ifndef _WIN32 (cf_platform.h covers MSVC)"), &mut notes);
+                note(
+                    format!("Wrapped <{header}> in #ifndef _WIN32 (cf_platform.h covers MSVC)"),
+                    &mut notes,
+                );
                 continue;
             }
             if c[2].eq("\"") {
                 let mut fixed = header.clone();
                 if cx.fix_include_case {
                     if let Some(f) = fix_include_case(rel, &header, cx) {
-                        note(format!("Fixed include case: \"{}\" → \"{f}\"", &c[3]), &mut notes);
+                        note(
+                            format!("Fixed include case: \"{}\" → \"{f}\"", &c[3]),
+                            &mut notes,
+                        );
                         fixed = f;
                     }
                 }
                 if fixed != c[3] {
                     if c[3].contains('\\') {
-                        note(format!("Normalized include path separators in \"{}\"", &c[3]), &mut notes);
+                        note(
+                            format!("Normalized include path separators in \"{}\"", &c[3]),
+                            &mut notes,
+                        );
                     }
                     out.push(format!("{}\"{}\"{}", &c[1], fixed, &c[5]));
                     continue;
@@ -159,7 +229,10 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
             out.push("#ifdef _MSC_VER".into());
             out.push(line.to_string());
             out.push("#endif".into());
-            note("Wrapped MSVC-only #pragma in #ifdef _MSC_VER".into(), &mut notes);
+            note(
+                "Wrapped MSVC-only #pragma in #ifdef _MSC_VER".into(),
+                &mut notes,
+            );
             continue;
         }
         if trimmed.starts_with('#') {
@@ -189,29 +262,63 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
                 note("__forceinline → CF_FORCEINLINE".into(), &mut notes);
             }
             if SLEEP.is_match(&l) {
-                let to = if cpp { "${1}cf::sleep_ms(" } else { "${1}cf_sleep_ms(" };
+                let to = if cpp {
+                    "${1}cf::sleep_ms("
+                } else {
+                    "${1}cf_sleep_ms("
+                };
                 l = SLEEP.replace_all(&l, to).into_owned();
-                note(format!("Sleep(ms) → {}", if cpp { "cf::sleep_ms" } else { "cf_sleep_ms" }), &mut notes);
+                note(
+                    format!(
+                        "Sleep(ms) → {}",
+                        if cpp { "cf::sleep_ms" } else { "cf_sleep_ms" }
+                    ),
+                    &mut notes,
+                );
             }
             if TICKS.is_match(&l) {
-                let to = if cpp { "${1}cf::ticks_ms()" } else { "${1}cf_ticks_ms()" };
+                let to = if cpp {
+                    "${1}cf::ticks_ms()"
+                } else {
+                    "${1}cf_ticks_ms()"
+                };
                 l = TICKS.replace_all(&l, to).into_owned();
-                note(format!("GetTickCount() → {}", if cpp { "cf::ticks_ms()" } else { "cf_ticks_ms()" }), &mut notes);
+                note(
+                    format!(
+                        "GetTickCount() → {}",
+                        if cpp {
+                            "cf::ticks_ms()"
+                        } else {
+                            "cf_ticks_ms()"
+                        }
+                    ),
+                    &mut notes,
+                );
             }
             if STRICMP.is_match(&l) {
                 l = STRICMP
                     .replace_all(&l, |c: &Captures| {
                         // C names even in C++: `cf::stricmp` would be mangled by the
                         // compat macro `#define stricmp cf_stricmp`.
-                        let f = if c[2].contains('n') { "cf_strnicmp" } else { "cf_stricmp" };
+                        let f = if c[2].contains('n') {
+                            "cf_strnicmp"
+                        } else {
+                            "cf_stricmp"
+                        };
                         format!("{}{f}(", &c[1])
                     })
                     .into_owned();
-                note("_stricmp/_strnicmp → cf_stricmp/cf_strnicmp (strcasecmp on POSIX)".into(), &mut notes);
+                note(
+                    "_stricmp/_strnicmp → cf_stricmp/cf_strnicmp (strcasecmp on POSIX)".into(),
+                    &mut notes,
+                );
             }
             if SNPRINTF.is_match(&l) {
                 l = SNPRINTF.replace_all(&l, "${1}${2}(").into_owned();
-                note("_snprintf/_vsnprintf → snprintf/vsnprintf".into(), &mut notes);
+                note(
+                    "_snprintf/_vsnprintf → snprintf/vsnprintf".into(),
+                    &mut notes,
+                );
             }
             if GETENV.is_match(&l) {
                 l = GETENV
@@ -224,8 +331,15 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
                 note("getenv(\"APPDATA\"/\"USERPROFILE\"/\"TEMP\") → cf_user_data_dir()/cf_home_dir()/cf_temp_dir()".into(), &mut notes);
             }
             if BACKSLASH_C.is_match(&l) {
-                l = BACKSLASH_C.replace_all(&l, |c: &Captures| format!("\"{}\"", c[1].replace("\\\\", "/"))).into_owned();
-                note("Backslash path literals → forward slashes".into(), &mut notes);
+                l = BACKSLASH_C
+                    .replace_all(&l, |c: &Captures| {
+                        format!("\"{}\"", c[1].replace("\\\\", "/"))
+                    })
+                    .into_owned();
+                note(
+                    "Backslash path literals → forward slashes".into(),
+                    &mut notes,
+                );
             }
             if cx.idiomatic {
                 if ZEROMEM.is_match(&l) {
@@ -233,7 +347,16 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
                     note("ZeroMemory → memset".into(), &mut notes);
                 }
                 if COPYMEM.is_match(&l) {
-                    l = COPYMEM.replace_all(&l, |c: &Captures| if &c[1] == "CopyMemory" { "memcpy(" } else { "memmove(" }.to_string()).into_owned();
+                    l = COPYMEM
+                        .replace_all(&l, |c: &Captures| {
+                            if &c[1] == "CopyMemory" {
+                                "memcpy("
+                            } else {
+                                "memmove("
+                            }
+                            .to_string()
+                        })
+                        .into_owned();
                     note("CopyMemory/MoveMemory → memcpy/memmove".into(), &mut notes);
                 }
                 if DEBUGSTR.is_match(&l) {
@@ -246,19 +369,41 @@ pub fn rewrite_c(rel: &str, lang_id: &str, text: &str, cx: &RewriteCtx) -> Optio
             if STRCASECMP.is_match(&l) {
                 l = STRCASECMP
                     .replace_all(&l, |c: &Captures| {
-                        let f = if &c[2] == "strncasecmp" { "cf_strnicmp" } else { "cf_stricmp" };
+                        let f = if &c[2] == "strncasecmp" {
+                            "cf_strnicmp"
+                        } else {
+                            "cf_stricmp"
+                        };
                         format!("{}{f}(", &c[1])
                     })
                     .into_owned();
-                note("strcasecmp/strncasecmp → cf_stricmp/cf_strnicmp (_stricmp on Windows)".into(), &mut notes);
+                note(
+                    "strcasecmp/strncasecmp → cf_stricmp/cf_strnicmp (_stricmp on Windows)".into(),
+                    &mut notes,
+                );
             }
             if USLEEP.is_match(&l) {
-                l = USLEEP.replace_all(&l, if cpp { "${1}cf::sleep_us(" } else { "${1}cf_sleep_us(" }).into_owned();
+                l = USLEEP
+                    .replace_all(
+                        &l,
+                        if cpp {
+                            "${1}cf::sleep_us("
+                        } else {
+                            "${1}cf_sleep_us("
+                        },
+                    )
+                    .into_owned();
                 note("usleep → cf_sleep_us".into(), &mut notes);
             }
         }
-        if PROC_EXE.is_match(&l) && g.as_ref().map(|a| a.len() > 1 || !a.contains(&Os::Linux)).unwrap_or(true) {
-            l = PROC_EXE.replace_all(&l, "cf_executable_path_into(").into_owned();
+        if PROC_EXE.is_match(&l)
+            && g.as_ref()
+                .map(|a| a.len() > 1 || !a.contains(&Os::Linux))
+                .unwrap_or(true)
+        {
+            l = PROC_EXE
+                .replace_all(&l, "cf_executable_path_into(")
+                .into_owned();
             note("readlink(\"/proc/self/exe\") → cf_executable_path_into() (sysctl on FreeBSD, _NSGetExecutablePath on macOS)".into(), &mut notes);
         }
         if l != before && (l.contains("cf_") || l.contains("cf::") || l.contains("CF_")) {
@@ -290,7 +435,11 @@ fn shim_insert_pos(lines: &[String]) -> usize {
     static IF: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*#\s*if(n?def)?\b"));
     static ENDIF: LazyLock<Regex> = LazyLock::new(|| re(r"^\s*#\s*endif\b"));
     // Detect a classic include guard: first directive #ifndef X, next #define X.
-    let directives: Vec<(usize, &String)> = lines.iter().enumerate().filter(|(_, l)| l.trim_start().starts_with('#')).collect();
+    let directives: Vec<(usize, &String)> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.trim_start().starts_with('#'))
+        .collect();
     let mut guard_end = None;
     if let (Some((_, d0)), Some((i1, d1))) = (directives.first(), directives.get(1)) {
         let t0 = d0.trim_start();
@@ -319,14 +468,22 @@ fn shim_insert_pos(lines: &[String]) -> usize {
     if let Some(g) = guard_end {
         return g;
     }
-    if let Some(i) = lines.iter().take(40).position(|l| l.trim_start().starts_with("#pragma once")) {
+    if let Some(i) = lines
+        .iter()
+        .take(40)
+        .position(|l| l.trim_start().starts_with("#pragma once"))
+    {
         return i + 1;
     }
     0
 }
 
 fn norm_join(dir: &str, inc: &str) -> Option<String> {
-    let mut parts: Vec<&str> = if dir.is_empty() { vec![] } else { dir.split('/').collect() };
+    let mut parts: Vec<&str> = if dir.is_empty() {
+        vec![]
+    } else {
+        dir.split('/').collect()
+    };
     for seg in inc.split('/') {
         match seg {
             "" | "." => {}
@@ -346,7 +503,9 @@ fn fix_include_case(rel: &str, inc: &str, cx: &RewriteCtx) -> Option<String> {
     let mut bases: Vec<&str> = vec![dir, ""];
     bases.extend(cx.include_dirs.iter().map(String::as_str));
     for base in bases {
-        let Some(joined) = norm_join(base, inc) else { continue };
+        let Some(joined) = norm_join(base, inc) else {
+            continue;
+        };
         if cx.files_lower.values().any(|v| *v == joined) {
             return None; // exact match exists
         }
@@ -362,7 +521,13 @@ fn fix_include_case(rel: &str, inc: &str, cx: &RewriteCtx) -> Option<String> {
             let fixed: Vec<String> = orig
                 .iter()
                 .zip(tail.iter())
-                .map(|(o, t)| if *o == ".." || *o == "." { o.to_string() } else { t.to_string() })
+                .map(|(o, t)| {
+                    if *o == ".." || *o == "." {
+                        o.to_string()
+                    } else {
+                        t.to_string()
+                    }
+                })
                 .collect();
             let f = fixed.join("/");
             return (f != inc).then_some(f);
@@ -375,17 +540,25 @@ fn fix_include_case(rel: &str, inc: &str, cx: &RewriteCtx) -> Option<String> {
 // Python
 // ---------------------------------------------------------------------------
 
-static PY_IMPORT_WINREG: LazyLock<Regex> = LazyLock::new(|| re(r"^(\s*)import\s+(_?winreg)(\s+as\s+(\w+))?\s*$"));
-static PY_FROM_WINREG: LazyLock<Regex> = LazyLock::new(|| re(r"^(\s*)from\s+_?winreg\s+import\s+(.+)$"));
-static PY_IMPORT_MSVCRT: LazyLock<Regex> = LazyLock::new(|| re(r"^(\s*)import\s+msvcrt(\s+as\s+(\w+))?\s*$"));
+static PY_IMPORT_WINREG: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^(\s*)import\s+(_?winreg)(\s+as\s+(\w+))?\s*$"));
+static PY_FROM_WINREG: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^(\s*)from\s+_?winreg\s+import\s+(.+)$"));
+static PY_IMPORT_MSVCRT: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^(\s*)import\s+msvcrt(\s+as\s+(\w+))?\s*$"));
 static PY_STARTFILE: LazyLock<Regex> = LazyLock::new(|| re(r"\bos\.startfile\s*\("));
 static PY_CLS: LazyLock<Regex> = LazyLock::new(|| re(r#"\bos\.system\s*\(\s*['"]cls['"]\s*\)"#));
 static PY_ENV: LazyLock<Regex> = LazyLock::new(|| {
-    re(r#"\bos\.(?:environ\s*\[\s*['"](APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)['"]\s*\]|environ\.get\s*\(\s*['"](APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)['"]\s*(?:,[^()]*)?\)|getenv\s*\(\s*['"](APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)['"]\s*(?:,[^()]*)?\))"#)
+    re(
+        r#"\bos\.(?:environ\s*\[\s*['"](APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)['"]\s*\]|environ\.get\s*\(\s*['"](APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)['"]\s*(?:,[^()]*)?\)|getenv\s*\(\s*['"](APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)['"]\s*(?:,[^()]*)?\))"#,
+    )
 });
-static PY_RAW_BACKSLASH: LazyLock<Regex> = LazyLock::new(|| re(r#"\b[rR](["'])([A-Za-z0-9_.\-]+(?:\\[A-Za-z0-9_.\-]+)+)(["'])"#));
-static PY_BACKSLASH: LazyLock<Regex> = LazyLock::new(|| re(r#"(^|[^\w])(["'])([A-Za-z0-9_.\-]+(?:\\\\[A-Za-z0-9_.\-]+)+)(["'])"#));
-static PY_TOP_IMPORT: LazyLock<Regex> = LazyLock::new(|| re(r"^(import\s+\w|from\s+[\w.]+\s+import\s)"));
+static PY_RAW_BACKSLASH: LazyLock<Regex> =
+    LazyLock::new(|| re(r#"\b[rR](["'])([A-Za-z0-9_.\-]+(?:\\[A-Za-z0-9_.\-]+)+)(["'])"#));
+static PY_BACKSLASH: LazyLock<Regex> =
+    LazyLock::new(|| re(r#"(^|[^\w])(["'])([A-Za-z0-9_.\-]+(?:\\\\[A-Za-z0-9_.\-]+)+)(["'])"#));
+static PY_TOP_IMPORT: LazyLock<Regex> =
+    LazyLock::new(|| re(r"^(import\s+\w|from\s+[\w.]+\s+import\s)"));
 
 pub fn rewrite_python(rel: &str, text: &str) -> Option<Rewritten> {
     let mut notes: Vec<String> = Vec::new();
@@ -399,7 +572,10 @@ pub fn rewrite_python(rel: &str, text: &str) -> Option<Rewritten> {
         }
         let mut l = line.to_string();
         if let Some(c) = PY_IMPORT_WINREG.captures(&l) {
-            let alias = c.get(4).map(|m| m.as_str().to_string()).unwrap_or_else(|| c[2].to_string());
+            let alias = c
+                .get(4)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| c[2].to_string());
             l = format!("{}from crossfire import cf_winreg as {alias}", &c[1]);
             notes.push("import winreg → crossfire.cf_winreg (JSON-backed off Windows)".into());
             uses_crossfire = true;
@@ -414,19 +590,28 @@ pub fn rewrite_python(rel: &str, text: &str) -> Option<Rewritten> {
             uses_crossfire = true;
         }
         if PY_STARTFILE.is_match(&l) {
-            l = PY_STARTFILE.replace_all(&l, "cf_platform.open_path(").into_owned();
+            l = PY_STARTFILE
+                .replace_all(&l, "cf_platform.open_path(")
+                .into_owned();
             notes.push("os.startfile → cf_platform.open_path".into());
             need_platform = true;
         }
         if PY_CLS.is_match(&l) {
-            l = PY_CLS.replace_all(&l, "cf_platform.clear_screen()").into_owned();
+            l = PY_CLS
+                .replace_all(&l, "cf_platform.clear_screen()")
+                .into_owned();
             notes.push("os.system('cls') → cf_platform.clear_screen()".into());
             need_platform = true;
         }
         if PY_ENV.is_match(&l) {
             l = PY_ENV
                 .replace_all(&l, |c: &Captures| {
-                    let var = c.get(1).or(c.get(2)).or(c.get(3)).map(|m| m.as_str()).unwrap_or("");
+                    let var = c
+                        .get(1)
+                        .or(c.get(2))
+                        .or(c.get(3))
+                        .map(|m| m.as_str())
+                        .unwrap_or("");
                     match var {
                         "APPDATA" => "cf_platform.user_data_dir()",
                         "LOCALAPPDATA" => "cf_platform.user_data_dir(local=True)",
@@ -440,12 +625,18 @@ pub fn rewrite_python(rel: &str, text: &str) -> Option<Rewritten> {
             need_platform = true;
         }
         if PY_RAW_BACKSLASH.is_match(&l) {
-            l = PY_RAW_BACKSLASH.replace_all(&l, |c: &Captures| format!("{}{}{}", &c[1], c[2].replace('\\', "/"), &c[3])).into_owned();
+            l = PY_RAW_BACKSLASH
+                .replace_all(&l, |c: &Captures| {
+                    format!("{}{}{}", &c[1], c[2].replace('\\', "/"), &c[3])
+                })
+                .into_owned();
             notes.push("Backslash path literals → forward slashes".into());
         }
         if PY_BACKSLASH.is_match(&l) {
             l = PY_BACKSLASH
-                .replace_all(&l, |c: &Captures| format!("{}{}{}{}", &c[1], &c[2], c[3].replace("\\\\", "/"), &c[4]))
+                .replace_all(&l, |c: &Captures| {
+                    format!("{}{}{}{}", &c[1], &c[2], c[3].replace("\\\\", "/"), &c[4])
+                })
                 .into_owned();
             notes.push("Backslash path literals → forward slashes".into());
         }
@@ -460,7 +651,11 @@ pub fn rewrite_python(rel: &str, text: &str) -> Option<Rewritten> {
         let pos = out
             .iter()
             .position(|l| PY_TOP_IMPORT.is_match(l) && !l.starts_with("from __future__"))
-            .unwrap_or_else(|| out.iter().position(|l| !l.starts_with("#!") && !l.starts_with("# -*-")).unwrap_or(0));
+            .unwrap_or_else(|| {
+                out.iter()
+                    .position(|l| !l.starts_with("#!") && !l.starts_with("# -*-"))
+                    .unwrap_or(0)
+            });
         let mut ins: Vec<String> = Vec::new();
         let depth = rel.matches('/').count();
         if depth > 0 {
@@ -489,10 +684,20 @@ pub fn rewrite_python(rel: &str, text: &str) -> Option<Rewritten> {
 // C#
 // ---------------------------------------------------------------------------
 
-static CS_VERBATIM: LazyLock<Regex> = LazyLock::new(|| re(r#"@"([A-Za-z0-9_.\-]+(?:\\[A-Za-z0-9_.\-]+)+)""#));
-static CS_ESCAPED: LazyLock<Regex> = LazyLock::new(|| re(r#"(^|[^@\w])"([A-Za-z0-9_.\-]+(?:\\\\[A-Za-z0-9_.\-]+)+)""#));
-static CS_ENV: LazyLock<Regex> = LazyLock::new(|| re(r#"\bEnvironment\.GetEnvironmentVariable\s*\(\s*"(APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)"\s*\)"#));
-static CS_EXPLORER: LazyLock<Regex> = LazyLock::new(|| re(r#"\b(?:System\.Diagnostics\.)?Process\.Start\s*\(\s*"explorer(?:\.exe)?"\s*,\s*([^;]+?)\)\s*;"#));
+static CS_VERBATIM: LazyLock<Regex> =
+    LazyLock::new(|| re(r#"@"([A-Za-z0-9_.\-]+(?:\\[A-Za-z0-9_.\-]+)+)""#));
+static CS_ESCAPED: LazyLock<Regex> =
+    LazyLock::new(|| re(r#"(^|[^@\w])"([A-Za-z0-9_.\-]+(?:\\\\[A-Za-z0-9_.\-]+)+)""#));
+static CS_ENV: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r#"\bEnvironment\.GetEnvironmentVariable\s*\(\s*"(APPDATA|LOCALAPPDATA|USERPROFILE|TEMP|TMP)"\s*\)"#,
+    )
+});
+static CS_EXPLORER: LazyLock<Regex> = LazyLock::new(|| {
+    re(
+        r#"\b(?:System\.Diagnostics\.)?Process\.Start\s*\(\s*"explorer(?:\.exe)?"\s*,\s*([^;]+?)\)\s*;"#,
+    )
+});
 
 pub fn rewrite_csharp(text: &str) -> Option<Rewritten> {
     let mut notes = Vec::new();
@@ -504,11 +709,19 @@ pub fn rewrite_csharp(text: &str) -> Option<Rewritten> {
         }
         let mut l = line.to_string();
         if CS_VERBATIM.is_match(&l) {
-            l = CS_VERBATIM.replace_all(&l, |c: &Captures| format!("\"{}\"", c[1].replace('\\', "/"))).into_owned();
+            l = CS_VERBATIM
+                .replace_all(&l, |c: &Captures| {
+                    format!("\"{}\"", c[1].replace('\\', "/"))
+                })
+                .into_owned();
             notes.push("Backslash path literals → forward slashes".to_string());
         }
         if CS_ESCAPED.is_match(&l) {
-            l = CS_ESCAPED.replace_all(&l, |c: &Captures| format!("{}\"{}\"", &c[1], c[2].replace("\\\\", "/"))).into_owned();
+            l = CS_ESCAPED
+                .replace_all(&l, |c: &Captures| {
+                    format!("{}\"{}\"", &c[1], c[2].replace("\\\\", "/"))
+                })
+                .into_owned();
             notes.push("Backslash path literals → forward slashes".to_string());
         }
         if CS_ENV.is_match(&l) {
@@ -522,7 +735,9 @@ pub fn rewrite_csharp(text: &str) -> Option<Rewritten> {
             notes.push("Windows env-var paths → Crossfire.CfPlatform".to_string());
         }
         if CS_EXPLORER.is_match(&l) {
-            l = CS_EXPLORER.replace_all(&l, "Crossfire.CfPlatform.OpenPath(${1});").into_owned();
+            l = CS_EXPLORER
+                .replace_all(&l, "Crossfire.CfPlatform.OpenPath(${1});")
+                .into_owned();
             notes.push("Process.Start(\"explorer\", …) → CfPlatform.OpenPath".to_string());
         }
         out.push(l);
@@ -546,7 +761,12 @@ pub fn rewrite_csproj(text: &str) -> Option<Rewritten> {
         &text[..pos],
         &text[pos..]
     );
-    Some(Rewritten { text: new, notes: vec!["Added <EnableWindowsTargeting> so the project builds on non-Windows hosts".into()] })
+    Some(Rewritten {
+        text: new,
+        notes: vec![
+            "Added <EnableWindowsTargeting> so the project builds on non-Windows hosts".into(),
+        ],
+    })
 }
 
 /// Shell scripts: portable shebang (bash lives in /usr/local/bin on FreeBSD).
@@ -557,7 +777,10 @@ pub fn rewrite_shell(text: &str) -> Option<Rewritten> {
         let args = first.trim_start_matches("#!/bin/bash");
         return Some(Rewritten {
             text: format!("#!/usr/bin/env bash{args}{rest}"),
-            notes: vec!["#!/bin/bash → #!/usr/bin/env bash (FreeBSD installs bash in /usr/local/bin)".into()],
+            notes: vec![
+                "#!/bin/bash → #!/usr/bin/env bash (FreeBSD installs bash in /usr/local/bin)"
+                    .into(),
+            ],
         });
     }
     None
@@ -567,8 +790,18 @@ pub fn rewrite_shell(text: &str) -> Option<Rewritten> {
 mod tests {
     use super::*;
 
-    fn cx<'a>(targets: &'a [Os], files: &'a HashMap<String, String>, dirs: &'a [String]) -> RewriteCtx<'a> {
-        RewriteCtx { targets, idiomatic: false, fix_include_case: true, files_lower: files, include_dirs: dirs }
+    fn cx<'a>(
+        targets: &'a [Os],
+        files: &'a HashMap<String, String>,
+        dirs: &'a [String],
+    ) -> RewriteCtx<'a> {
+        RewriteCtx {
+            targets,
+            idiomatic: false,
+            fix_include_case: true,
+            files_lower: files,
+            include_dirs: dirs,
+        }
     }
 
     #[test]
@@ -577,8 +810,17 @@ mod tests {
         let t = [Os::Linux, Os::Macos];
         let src = "#include <Windows.h>\n#include <stdio.h>\nint main(){\n  Sleep(16);\n  DWORD t = GetTickCount();\n  if (_stricmp(a, b) == 0) {}\n  FILE* f = fopen(\"data\\\\levels\\\\one.txt\", \"r\");\n  char* p = getenv(\"APPDATA\");\n}\n";
         let r = rewrite_c("src/main.c", "c", src, &cx(&t, &files, &[])).unwrap();
-        assert!(r.text.contains("#include \"../crossfire/cf_platform.h\""), "{}", r.text);
-        assert!(r.text.contains("#ifdef _WIN32\n#include <windows.h>\n#endif"), "{}", r.text);
+        assert!(
+            r.text.contains("#include \"../crossfire/cf_platform.h\""),
+            "{}",
+            r.text
+        );
+        assert!(
+            r.text
+                .contains("#ifdef _WIN32\n#include <windows.h>\n#endif"),
+            "{}",
+            r.text
+        );
         assert!(r.text.contains("cf_sleep_ms(16)"));
         assert!(r.text.contains("cf_ticks_ms()"));
         assert!(r.text.contains("cf_stricmp(a, b)"));
@@ -592,10 +834,20 @@ mod tests {
         let t = [Os::Linux];
         let src = "#ifdef _WIN32\n#include <windows.h>\nvoid w(){ Sleep(1); }\n#endif\nvoid f(){ Sleep(2); obj.Sleep(3); }\n";
         let r = rewrite_c("a.cpp", "cpp", src, &cx(&t, &files, &[])).unwrap();
-        assert!(r.text.contains("void w(){ Sleep(1); }"), "guarded code untouched: {}", r.text);
+        assert!(
+            r.text.contains("void w(){ Sleep(1); }"),
+            "guarded code untouched: {}",
+            r.text
+        );
         assert!(r.text.contains("cf::sleep_ms(2)"));
         assert!(r.text.contains("obj.Sleep(3)"));
-        assert!(r.text.starts_with("#include \"crossfire/cf_platform.h\"\n#ifdef _WIN32\n#include <windows.h>"), "{}", r.text);
+        assert!(
+            r.text.starts_with(
+                "#include \"crossfire/cf_platform.h\"\n#ifdef _WIN32\n#include <windows.h>"
+            ),
+            "{}",
+            r.text
+        );
     }
 
     #[test]
@@ -603,7 +855,13 @@ mod tests {
         let mut files = HashMap::new();
         files.insert("src/renderer.h".to_string(), "src/Renderer.h".to_string());
         let t = [Os::Linux];
-        let r = rewrite_c("src/main.cpp", "cpp", "#include \"renderer.h\"\n", &cx(&t, &files, &[])).unwrap();
+        let r = rewrite_c(
+            "src/main.cpp",
+            "cpp",
+            "#include \"renderer.h\"\n",
+            &cx(&t, &files, &[]),
+        )
+        .unwrap();
         assert_eq!(r.text, "#include \"Renderer.h\"\n");
     }
 
@@ -615,7 +873,12 @@ mod tests {
         assert!(r.text.contains("cf_platform.open_path(path)"));
         assert!(r.text.contains("d = cf_platform.user_data_dir()"));
         assert!(r.text.contains("\"assets/sounds/a.wav\""));
-        assert!(r.text.starts_with("from crossfire import cf_platform\nimport os"), "{}", r.text);
+        assert!(
+            r.text
+                .starts_with("from crossfire import cf_platform\nimport os"),
+            "{}",
+            r.text
+        );
     }
 
     #[test]

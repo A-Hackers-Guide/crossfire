@@ -14,12 +14,53 @@ use std::time::Instant;
 
 /// Directory names never descended into (build output, dependencies, caches).
 const SKIP_DIRS: &[&str] = &[
-    ".git", ".hg", ".svn", "node_modules", "target", "build", "Build", "builds", "bin", "obj",
-    "Library", ".godot", "DerivedData", "vendor", "third_party", "thirdparty", "3rdparty",
-    "external", ".vs", ".idea", "out", "Pods", "Carthage", "__pycache__", ".venv", "venv",
-    "dist", "Binaries", "Intermediate", "Saved", "DerivedDataCache", "Temp", "Logs", ".gradle",
-    ".dart_tool", "zig-cache", ".zig-cache", "zig-out", ".cache", ".tox", ".mypy_cache",
-    ".pytest_cache", ".build", ".swiftpm", "xcuserdata", ".import", "Packages_cache",
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+    "target",
+    "build",
+    "Build",
+    "builds",
+    "bin",
+    "obj",
+    "Library",
+    ".godot",
+    "DerivedData",
+    "vendor",
+    "third_party",
+    "thirdparty",
+    "3rdparty",
+    "external",
+    ".vs",
+    ".idea",
+    "out",
+    "Pods",
+    "Carthage",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "dist",
+    "Binaries",
+    "Intermediate",
+    "Saved",
+    "DerivedDataCache",
+    "Temp",
+    "Logs",
+    ".gradle",
+    ".dart_tool",
+    "zig-cache",
+    ".zig-cache",
+    "zig-out",
+    ".cache",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".build",
+    ".swiftpm",
+    "xcuserdata",
+    ".import",
+    "Packages_cache",
 ];
 
 /// Largest file we read for analysis.
@@ -75,7 +116,9 @@ pub fn walk(root: &Path) -> (Vec<PathBuf>, Vec<String>) {
             let name = e.file_name().to_string_lossy();
             if name.ends_with(".framework") {
                 if let Ok(rel) = e.path().strip_prefix(&root_owned) {
-                    fw.lock().unwrap_or_else(|p| p.into_inner()).push(rel_string(rel));
+                    fw.lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .push(rel_string(rel));
                 }
                 return false;
             }
@@ -117,7 +160,8 @@ fn entry_regex(lang_id: &str) -> Option<&'static Regex> {
     static C: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?m)^\s*(int|void|auto)\s+main\s*\(|\b(WinMain|wWinMain|_tWinMain|NSApplicationMain|UIApplicationMain|SDL_AppInit)\s*\(").unwrap()
     });
-    static RS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*(pub\s+)?fn\s+main\s*\(").unwrap());
+    static RS: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?m)^\s*(pub\s+)?fn\s+main\s*\(").unwrap());
     static GO: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^func\s+main\s*\(").unwrap());
     static CS: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"\bstatic\s+(async\s+)?(void|int|Task(<int>)?)\s+Main\s*\(").unwrap()
@@ -127,7 +171,8 @@ fn entry_regex(lang_id: &str) -> Option<&'static Regex> {
     });
     static PY: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r#"if\s+__name__\s*==\s*['"]__main__['"]"#).unwrap());
-    static SWIFT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"@main\b|NSApplicationMain").unwrap());
+    static SWIFT: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"@main\b|NSApplicationMain").unwrap());
     match lang_id {
         "c" | "cpp" | "objc" | "objcpp" => Some(&C),
         "rust" => Some(&RS),
@@ -148,13 +193,21 @@ struct FileResult {
 fn analyze(root: &Path, rel: &Path) -> FileResult {
     let rel_s = rel_string(rel);
     let lang = lang::classify(rel);
-    let mut info = FileInfo { rel: rel_s.clone(), lang, lines: 0, text: false, has_entry: false };
+    let mut info = FileInfo {
+        rel: rel_s.clone(),
+        lang,
+        lines: 0,
+        text: false,
+        has_entry: false,
+    };
     let mut findings = Vec::new();
     if let Some(l) = lang {
         if let Some(text) = read_text(&root.join(rel)) {
             info.text = true;
             info.lines = text.lines().count();
-            info.has_entry = entry_regex(l.id).map(|re| re.is_match(&text)).unwrap_or(false);
+            info.has_entry = entry_regex(l.id)
+                .map(|re| re.is_match(&text))
+                .unwrap_or(false);
             findings = rules::scan_text(&rel_s, l.id, &text);
         }
     }
@@ -173,14 +226,27 @@ pub fn scan_full(root: &Path, on: &dyn Fn(ProgressEvent)) -> Result<ScanData> {
         bail!("{} is not a directory", root.display());
     }
     let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    on(ProgressEvent::new(Stage::Scan, Level::Info, 0.0, format!("Walking {}", root.display())));
+    on(ProgressEvent::new(
+        Stage::Scan,
+        Level::Info,
+        0.0,
+        format!("Walking {}", root.display()),
+    ));
     let (paths, frameworks) = walk(&root);
     let total = paths.len();
-    on(ProgressEvent::new(Stage::Scan, Level::Info, 0.05, format!("Found {total} files; analyzing")));
+    on(ProgressEvent::new(
+        Stage::Scan,
+        Level::Info,
+        0.05,
+        format!("Found {total} files; analyzing"),
+    ));
 
     // Analyze files in parallel; progress flows back over a channel so the
     // (non-Sync) callback is only ever invoked from this thread.
-    let workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 16);
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .clamp(1, 16);
     let chunk = total.div_ceil(workers).max(1);
     let (tx, rx) = mpsc::channel::<String>();
     let mut results: Vec<FileResult> = Vec::with_capacity(total);
@@ -206,7 +272,13 @@ pub fn scan_full(root: &Path, on: &dyn Fn(ProgressEvent)) -> Result<ScanData> {
         for (done, rel) in rx.iter().enumerate() {
             if (done + 1) % step == 0 || done + 1 == total {
                 let p = 0.05 + 0.8 * (done + 1) as f64 / total.max(1) as f64;
-                on(ProgressEvent::new(Stage::Scan, Level::Info, p, format!("Analyzed {}/{}", done + 1, total)).with_file(rel));
+                on(ProgressEvent::new(
+                    Stage::Scan,
+                    Level::Info,
+                    p,
+                    format!("Analyzed {}/{}", done + 1, total),
+                )
+                .with_file(rel));
             }
         }
         for h in handles {
@@ -228,11 +300,20 @@ pub fn scan_full(root: &Path, on: &dyn Fn(ProgressEvent)) -> Result<ScanData> {
         f.id = format!("{}#{}", f.id, i + 1);
     }
 
-    on(ProgressEvent::new(Stage::Scan, Level::Info, 0.9, "Detecting project kinds and dependencies"));
+    on(ProgressEvent::new(
+        Stage::Scan,
+        Level::Info,
+        0.9,
+        "Detecting project kinds and dependencies",
+    ));
     let det = detect::detect(&root, &files, &findings, &frameworks);
 
     let languages = language_stats(&files);
-    let total_lines = files.iter().filter(|f| f.lang.is_some()).map(|f| f.lines).sum();
+    let total_lines = files
+        .iter()
+        .filter(|f| f.lang.is_some())
+        .map(|f| f.lines)
+        .sum();
     let portability = portability(&files, &findings);
     let mut categories: BTreeMap<Category, usize> = BTreeMap::new();
     for f in findings.iter().filter(|f| f.severity >= Severity::Low) {
@@ -240,7 +321,9 @@ pub fn scan_full(root: &Path, on: &dyn Fn(ProgressEvent)) -> Result<ScanData> {
     }
     let detected_os = detect_os(&findings, &det.os_hints);
     let name = det.name.clone().unwrap_or_else(|| {
-        root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "project".into())
+        root.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "project".into())
     });
 
     let report = ScanReport {
@@ -268,7 +351,11 @@ pub fn scan_full(root: &Path, on: &dyn Fn(ProgressEvent)) -> Result<ScanData> {
             report.portability
         ),
     ));
-    Ok(ScanData { report, files, frameworks })
+    Ok(ScanData {
+        report,
+        files,
+        frameworks,
+    })
 }
 
 fn language_stats(files: &[FileInfo]) -> Vec<LanguageStat> {
@@ -285,8 +372,10 @@ fn language_stats(files: &[FileInfo]) -> Vec<LanguageStat> {
     }
     // Attribute .h headers to C++ or C depending on which dominates.
     if let Some(h) = map.remove("C/C++ Header") {
-        let cpp = map.get("C++").map(|x| x.0).unwrap_or(0) + map.get("Objective-C++").map(|x| x.0).unwrap_or(0);
-        let c = map.get("C").map(|x| x.0).unwrap_or(0) + map.get("Objective-C").map(|x| x.0).unwrap_or(0);
+        let cpp = map.get("C++").map(|x| x.0).unwrap_or(0)
+            + map.get("Objective-C++").map(|x| x.0).unwrap_or(0);
+        let c = map.get("C").map(|x| x.0).unwrap_or(0)
+            + map.get("Objective-C").map(|x| x.0).unwrap_or(0);
         let target = if cpp >= c && cpp > 0 {
             "C++"
         } else if c > 0 && map.contains_key("C") {
@@ -300,8 +389,14 @@ fn language_stats(files: &[FileInfo]) -> Vec<LanguageStat> {
         e.0 += h.0;
         e.1 += h.1;
     }
-    let mut v: Vec<LanguageStat> =
-        map.into_iter().map(|(n, (files, lines))| LanguageStat { name: n.to_string(), files, lines }).collect();
+    let mut v: Vec<LanguageStat> = map
+        .into_iter()
+        .map(|(n, (files, lines))| LanguageStat {
+            name: n.to_string(),
+            files,
+            lines,
+        })
+        .collect();
     v.sort_by(|a, b| b.lines.cmp(&a.lines).then(a.name.cmp(&b.name)));
     v
 }
@@ -322,7 +417,10 @@ pub fn portability(files: &[FileInfo], findings: &[Finding]) -> f64 {
     }
     let mut total = 0.0;
     let mut bad = 0.0;
-    for f in files.iter().filter(|f| f.lang.map(|l| l.code).unwrap_or(false)) {
+    for f in files
+        .iter()
+        .filter(|f| f.lang.map(|l| l.code).unwrap_or(false))
+    {
         let lines = f.lines.max(1) as f64;
         total += lines;
         if let Some(s) = worst.get(f.rel.as_str()) {
@@ -363,9 +461,17 @@ pub fn detect_os(findings: &[Finding], hints: &[(Os, f64)]) -> Vec<Os> {
     }
     let max = score.values().cloned().fold(0.0, f64::max);
     if max <= 0.0 {
-        return if unix_score > 0.0 { vec![Os::Macos, Os::Linux, Os::Freebsd] } else { Os::ALL.to_vec() };
+        return if unix_score > 0.0 {
+            vec![Os::Macos, Os::Linux, Os::Freebsd]
+        } else {
+            Os::ALL.to_vec()
+        };
     }
-    let mut v: Vec<Os> = score.into_iter().filter(|(_, s)| *s >= max * 0.35).map(|(o, _)| o).collect();
+    let mut v: Vec<Os> = score
+        .into_iter()
+        .filter(|(_, s)| *s >= max * 0.35)
+        .map(|(o, _)| o)
+        .collect();
     v.sort();
     v
 }

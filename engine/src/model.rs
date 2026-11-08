@@ -361,7 +361,13 @@ pub struct ProgressEvent {
 
 impl ProgressEvent {
     pub fn new(stage: Stage, level: Level, progress: f64, message: impl Into<String>) -> Self {
-        ProgressEvent { stage, message: message.into(), progress, file: None, level }
+        ProgressEvent {
+            stage,
+            message: message.into(),
+            progress,
+            file: None,
+            level,
+        }
     }
 
     pub fn with_file(mut self, file: impl Into<String>) -> Self {
@@ -400,9 +406,10 @@ impl AnswersExt for Answers {
 
     fn list(&self, key: &str) -> Vec<String> {
         match self.get(key) {
-            Some(serde_json::Value::Array(a)) => {
-                a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
-            }
+            Some(serde_json::Value::Array(a)) => a
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect(),
             Some(serde_json::Value::String(s)) if !s.is_empty() => {
                 s.split(',').map(|x| x.trim().to_string()).collect()
             }
