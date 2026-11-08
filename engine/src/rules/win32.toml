@@ -281,3 +281,80 @@ rules = [
   { id = "msvc.mfc", api = "MFC", re = '#\s*include\s*[<"](?i:afxwin\.h|afx\w*\.h)[>"]|\bCWinApp\b|\bCDialog(Ex)?\b', msg = "MFC application framework.", sev = "blocker", cat = "ui", fix = "Port the UI to Qt 6 or wxWidgets (closest MFC-like model); business logic can stay." },
   { id = "msvc.atl", api = "ATL/WTL", re = '#\s*include\s*[<"](?i:atl\w*\.h|wtl\w*\.h)[>"]', msg = "ATL/WTL templates.", sev = "high", cat = "ui", fix = "Replace with standard C++ and a portable UI toolkit." },
 ]
+
+# --- Async I/O / IOCP / overlapped ---------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "networking"
+sev = "high"
+fix = "Use a portable async-I/O layer: libuv (default across all four OSes), asio, or an epoll/kqueue/IOCP shim. cf_platform.h aliases OVERLAPPED/HANDLE to opaque cf_io_t."
+rules = [
+  { id = "win32.iocp.create", api = "CreateIoCompletionPort", re = '\bCreateIoCompletionPort\s*\(', msg = "Creates an I/O completion port — the Windows native async model." },
+  { id = "win32.iocp.get",    api = "GetQueuedCompletionStatus", re = '\bGetQueuedCompletionStatus(Ex)?\s*\(', msg = "Blocks on an IOCP waiting for completion packets." },
+  { id = "win32.iocp.post",   api = "PostQueuedCompletionStatus", re = '\bPostQueuedCompletionStatus\s*\(', msg = "Posts a completion packet to an IOCP." },
+  { id = "win32.overlapped.ex", api = "ReadFileEx / WriteFileEx / AcceptEx", re = '\b(ReadFileEx|WriteFileEx|ConnectEx|AcceptEx|DisconnectEx|TransmitFile)\s*\(', msg = "Win32 overlapped-I/O extension points (distinct from the plain OVERLAPPED struct)." },
+  { id = "win32.wsa.event",   api = "WSAEventSelect / WSAWaitForMultipleEvents", re = '\bWSA(EventSelect|WaitForMultipleEvents|CreateEvent|CloseEvent|ResetEvent|SetEvent|EnumNetworkEvents)\s*\(', msg = "WSA event-based socket notification.", cat = "networking" },
+  { id = "win32.winsock.init", api = "WSAStartup / WSACleanup", re = '\b(WSAStartup|WSACleanup|WSAGetLastError)\s*\(', msg = "Mandatory WinSock init/cleanup pair.", cat = "networking", sev = "medium", fix = "No-op on POSIX; cf_net_init()/cf_net_shutdown() wraps it." },
+  { id = "win32.winsock.sockapi", api = "closesocket / WSASend / WSARecv", re = '\b(closesocket|WSASend|WSARecv|WSASendTo|WSARecvFrom|WSAIoctl|WSAConnect|WSAAccept|WSASocketW?)\s*\(', msg = "WinSock-specific socket calls.", cat = "networking", sev = "medium", fix = "Use the standard BSD socket API (send/recv/close) available on all four OSes; cf_platform.h maps closesocket→close off Windows." },
+  { id = "win32.inet.addr", api = "inet_addr / InetPton", re = '\b(inet_addr|InetPton[AW]?|InetNtop[AW]?|RtlIpv4StringToAddressA)\s*\(', msg = "Win32 wide-string socket address helpers.", cat = "networking", sev = "low", fix = "Use inet_pton/inet_ntop from <arpa/inet.h> on POSIX." },
+  { id = "win32.waitable.timer", api = "WaitableTimer", re = '\b(CreateWaitableTimer(Ex)?[AW]?|SetWaitableTimer(Ex)?)\s*\(', msg = "Win32 waitable timer kernel object.", cat = "timing", sev = "medium", fix = "timerfd on Linux (+ libkqueue EVFILT_TIMER on BSD/macOS), SDL_AddTimer, or std::chrono + sleep." },
+]
+
+# --- Threading / synchronization ----------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "threading"
+sev = "medium"
+fix = "Prefer std::thread / std::mutex / std::condition_variable / std::atomic; pthread is the fallback on POSIX."
+rules = [
+  { id = "win32.thread.create",     api = "CreateThread",            re = '\b(CreateThread|_beginthreadex|_beginthread)\s*\(', msg = "Win32 thread creation." },
+  { id = "win32.thread.exit",       api = "ExitThread",              re = '\b(ExitThread|_endthreadex|TerminateThread)\s*\(', msg = "Win32 thread exit / termination.", sev = "high", fix = "Use std::thread::join; TerminateThread is unsafe and has no portable equivalent (redesign the shutdown path)." },
+  { id = "win32.thread.wait",       api = "WaitForSingleObject",     re = '\bWaitForSingle(Object(Ex)?|InputIdle)\s*\(', msg = "Win32 kernel-object wait primitive." },
+  { id = "win32.thread.multi",      api = "WaitForMultipleObjects",  re = '\bWaitForMultipleObjects(Ex)?\s*\(', msg = "Wait on up to 64 kernel objects." },
+  { id = "win32.cs.init",           api = "CRITICAL_SECTION",        re = '\b(CRITICAL_SECTION|InitializeCriticalSection(Ex|AndSpinCount)?|EnterCriticalSection|LeaveCriticalSection|TryEnterCriticalSection|DeleteCriticalSection)\b', msg = "Win32 CRITICAL_SECTION family." },
+  { id = "win32.srwlock.try", api = "TryAcquireSRWLock*", re = '\bTryAcquireSRWLock(Exclusive|Shared)\b', msg = "Try-acquire variant of the slim reader-writer lock.", fix = "std::shared_mutex::try_lock / try_lock_shared (C++17)." },
+  { id = "win32.event.create",      api = "CreateEvent",             re = '\b(CreateEvent(Ex)?[AW]?|OpenEvent[AW]?|SetEvent|ResetEvent|PulseEvent)\s*\(', msg = "Win32 event kernel objects.", fix = "std::condition_variable + std::mutex." },
+  { id = "win32.mutex.create",      api = "CreateMutex",             re = '\b(CreateMutex(Ex)?[AW]?|OpenMutex[AW]?|ReleaseMutex)\s*\(', msg = "Win32 named/unnamed mutex objects.", fix = "std::mutex, or pthread_mutex for named cross-process cases." },
+  { id = "win32.sem.create",        api = "CreateSemaphore",         re = '\b(CreateSemaphore(Ex)?[AW]?|OpenSemaphore[AW]?|ReleaseSemaphore)\s*\(', msg = "Win32 semaphore kernel objects.", fix = "std::counting_semaphore (C++20), sem_t (POSIX)." },
+  { id = "win32.condvar",           api = "CONDITION_VARIABLE",      re = '\b(CONDITION_VARIABLE|InitializeConditionVariable|Sleep(ConditionVariable(CS|SRW))|WakeConditionVariable|WakeAllConditionVariable)\b', msg = "Win32 condition variables.", fix = "std::condition_variable." },
+  { id = "win32.interlocked.ptr", api = "InterlockedExchangePointer / InterlockedCompareExchangePointer", re = '\bInterlocked(Exchange|CompareExchange)Pointer\s*\(', msg = "Pointer-width atomic intrinsics.", sev = "low", fix = "std::atomic<T*>." },
+  { id = "win32.tls.fls", api = "FlsAlloc / FlsSetValue / FlsGetValue", re = '\b(FlsAlloc|FlsFree|FlsSetValue|FlsGetValue)\s*\(', msg = "Win32 fiber-local storage (not just thread-local).", fix = "No portable primitive; port off fibers (see win32.fiber)." },
+  { id = "win32.fiber",             api = "CreateFiber",             re = '\b(CreateFiber(Ex)?|ConvertThreadToFiber(Ex)?|SwitchToFiber|DeleteFiber|GetFiberData|GetCurrentFiber)\s*\(', msg = "Win32 user-mode fibers.", sev = "high", fix = "No portable primitive; port to coroutines (C++20 coroutines, Boost.Context, libaco, or an async/await runtime)." },
+  { id = "win32.sleep.ex",          api = "SleepEx",                 re = '\bSleepEx\s*\(', msg = "Alertable sleep.", cat = "timing", sev = "low", fix = "No alertable equivalent off Windows; use a std::condition_variable the APC was going to signal." },
+  { id = "win32.affinity",          api = "SetThreadAffinityMask",   re = '\b(SetThreadAffinityMask|GetThreadAffinityMask|SetThreadIdealProcessor(Ex)?|SetProcessAffinityMask)\s*\(', msg = "Win32 CPU-affinity controls.", fix = "sched_setaffinity (Linux), thread_policy_set (macOS), cpuset_setaffinity (FreeBSD); all advisory." },
+]
+
+# --- Memory / heap / mapped files ---------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "other"
+sev = "medium"
+fix = "Prefer std::allocator / std::pmr, mmap(2) for mapped files, and VirtualAlloc→mmap(MAP_ANONYMOUS)."
+rules = [
+  { id = "win32.virtualalloc.numa", api = "VirtualAllocExNuma", re = '\bVirtualAllocExNuma\s*\(', msg = "NUMA-aware reservation of virtual memory.", fix = "mbind(2) (Linux); macOS/BSD/Windows w/o NUMA just fall back to a regular allocation." },
+  { id = "win32.virtualfree",     api = "VirtualFree",              re = '\bVirtualFree(Ex)?\s*\(', msg = "Release virtual memory." },
+  { id = "win32.virtualprotect",  api = "VirtualProtect",           re = '\bVirtualProtect(Ex)?\s*\(', msg = "Change page protections.", fix = "mprotect(2)." },
+  { id = "win32.heapapi",         api = "HeapCreate / HeapAlloc",   re = '\b(HeapCreate|HeapAlloc|HeapFree|HeapReAlloc|HeapDestroy|GetProcessHeap)\s*\(', msg = "Win32 private-heap API.", fix = "Portable arenas: mimalloc, jemalloc, or just std::pmr::monotonic_buffer_resource." },
+  { id = "win32.mapping.create",  api = "CreateFileMapping",        re = '\bCreateFileMapping(A|W|FromApp)?\s*\(', msg = "Memory-mapped file object.", fix = "mmap(2) on POSIX; macOS supports MAP_HASSEMAPHORE." },
+  { id = "win32.mapping.map",     api = "MapViewOfFile",            re = '\bMapViewOfFile(Ex)?(FromApp)?\s*\(', msg = "Map a view of a FileMapping.", fix = "mmap(2)." },
+  { id = "win32.mapping.unmap",   api = "UnmapViewOfFile",          re = '\bUnmapViewOfFile(Ex)?\s*\(', msg = "Unmap a FileMapping view.", fix = "munmap(2)." },
+  { id = "win32.flush.file",      api = "FlushViewOfFile",          re = '\bFlushViewOfFile\s*\(|\bFlushFileBuffers\s*\(', msg = "Flush a mapping / file buffers.", fix = "msync (mmap) or fsync (file descriptor)." },
+]
+
+# --- Named pipes / services / anti-debug (small group) -------------------
+[[group]]
+lang = ["cfam"]
+os = ["windows"]
+cat = "process"
+sev = "high"
+fix = "Named pipes → UNIX domain sockets; services → systemd units / launchd plist / rc.d; anti-debug → ptrace detection on POSIX with the same disclaimers."
+rules = [
+  { id = "win32.pipe.create",   api = "CreateNamedPipe",       re = '\bCreateNamedPipe[AW]?\s*\(', msg = "Create a named pipe." },
+  { id = "win32.pipe.connect",  api = "ConnectNamedPipe",      re = '\b(ConnectNamedPipe|DisconnectNamedPipe|WaitNamedPipe[AW]?)\s*\(', msg = "Server-side named-pipe lifecycle." },
+  { id = "win32.service.start", api = "StartServiceCtrlDispatcher", re = '\bStartServiceCtrlDispatcher[AW]?\s*\(', msg = "Entry point for a Windows service." },
+  { id = "win32.service.create",api = "CreateService",         re = '\b(CreateService[AW]?|OpenService[AW]?|DeleteService|OpenSCManager[AW]?)\s*\(', msg = "Service control manager calls." },
+  { id = "win32.isdbg",         api = "IsDebuggerPresent",     re = '\b(IsDebuggerPresent|CheckRemoteDebuggerPresent|OutputDebugString[AW]?)\s*\(', msg = "Debugger detection / logging to attached debugger.", sev = "low", fix = "ptrace(PT_DENY_ATTACH/PT_TRACE_ME) + anti-debug caveat; OutputDebugString → stderr or syslog." },
+]

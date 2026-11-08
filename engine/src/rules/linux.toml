@@ -127,3 +127,73 @@ rules = [
   { id = "glibc.so-name", api = ".so library name", re = '"[\w\-\.]*lib[\w\-]+\.so(\.\d+)*"', msg = "Hard-coded ELF shared-object name.", sev = "medium", cat = "dynamicLibrary", os = ["linux", "freebsd"], lang = ["cfam", "python", "rust", "go", "js", "java", "csharp"], fix = "Build names per OS: libfoo.dylib (macOS), foo.dll (Windows); FreeBSD sonames often differ in version suffix (CF_SHARED_LIB_NAME)." },
   { id = "linux.systemd", api = "systemd", re = '#\s*include\s*[<"]systemd/sd-(daemon|journal|login|event)\.h[>"]|\bsd_(notify|journal_print|booted|listen_fds)\s*\(', msg = "systemd integration.", sev = "medium", cat = "process", fix = "Make optional: rc.d + daemon(8) on FreeBSD, launchd on macOS, Windows services; log via syslog/stderr." },
 ]
+
+# --- io_uring (Linux 5.1+; no portable equivalent) -----------------------
+[[group]]
+lang = ["cfam"]
+os = ["linux"]
+cat = "networking"
+sev = "high"
+fix = "Make async-I/O backend-pluggable: liburing on recent Linux, epoll fallback, kqueue on BSD/macOS, IOCP on Windows (libuv/asio already do this)."
+rules = [
+  { id = "linux.iouring.setup",     api = "io_uring_setup",      re = '\bio_uring_setup\s*\(', msg = "Low-level io_uring ring setup." },
+  { id = "linux.iouring.enter",     api = "io_uring_enter",      re = '\bio_uring_enter\s*\(', msg = "io_uring submission entry syscall." },
+  { id = "linux.iouring.register",  api = "io_uring_register",   re = '\bio_uring_register\s*\(', msg = "io_uring buffer / file registration." },
+  { id = "linux.iouring.liburing",  api = "liburing",            re = '#\s*include\s*<liburing\.h>|\bio_uring_queue_init\s*\(|\bio_uring_submit\s*\(|\bio_uring_wait_cqe\s*\(|\bio_uring_prep_(read|write|readv|writev|accept|connect|recv|send|openat|close|timeout|poll_add|nop)\s*\(', msg = "liburing high-level wrapper." },
+]
+
+# --- cgroups v2 ----------------------------------------------------------
+[[group]]
+lang = ["cfam", "shell", "go", "rust", "python"]
+os = ["linux"]
+cat = "process"
+sev = "medium"
+fix = "Linux-only. On macOS/Windows/FreeBSD the equivalents are launchd quotas, Job Objects, and rctl."
+rules = [
+  { id = "linux.cgroup.path",     api = "/sys/fs/cgroup",       re = '"/sys/fs/cgroup[/"]', msg = "cgroups v1/v2 filesystem path." },
+  { id = "linux.cgroup.v2",       api = "cgroup.controllers",   re = '"cgroup\.(controllers|procs|subtree_control|threads)"', msg = "cgroups v2 unified-hierarchy control files.", once = true },
+  { id = "linux.cgroup.max",      api = "memory.max / cpu.max", re = '"(memory\.(max|high|low)|cpu\.(max|weight)|pids\.max|io\.max)"', msg = "cgroups v2 resource-limit files.", once = true },
+  { id = "linux.namespace.unshare", api = "unshare / setns",    re = '#\s*include\s*<sched\.h>\s*//\s*CLONE_|\b(unshare|setns)\s*\(|\bCLONE_NEW(NS|UTS|IPC|PID|NET|USER|CGROUP)\b', msg = "Linux namespace syscalls (containers)." },
+  { id = "linux.capability",      api = "capset / capget",      re = '\b(capget|capset|capability|prctl\s*\(\s*PR_CAPBSET_READ)\b|#\s*include\s*<sys/capability\.h>', msg = "Linux capabilities (POSIX.1e subset)." },
+]
+
+# --- systemd / journald (beyond the single rule in the main block) -------
+[[group]]
+lang = ["cfam", "shell"]
+os = ["linux"]
+cat = "process"
+sev = "medium"
+fix = "Make daemon integration optional; log to stderr/syslog; start up via init-script wrapper on non-systemd targets."
+rules = [
+  { id = "linux.systemd.unit",     api = "systemd unit file",    re = '^\[Unit\]|^\[Service\]|^\[Install\]', lang = ["ini", "shell"], msg = "systemd unit-file section header.", once = true, fix = "Ship a .service unit for Linux, launchd .plist for macOS, Windows service for Windows, rc.d script for FreeBSD." },
+  { id = "linux.sdjournal.send",   api = "sd_journal_send",      re = '\bsd_journal_send(v)?\s*\(', msg = "Structured journald logging.", fix = "syslog on POSIX; os_log on macOS; ETW/Event Log on Windows." },
+  { id = "linux.sdjournal.print",  api = "sd_journal_print",     re = '\bsd_journal_print(v)?\s*\(', msg = "Printf-style journald logging." },
+  { id = "linux.sdbus",            api = "sd-bus",               re = '#\s*include\s*<systemd/sd-bus\.h>|\bsd_bus_(open|call|message_new|add_match)\w*\s*\(', msg = "systemd sd-bus client.", cat = "networking", fix = "libdbus or gdbus for portability." },
+]
+
+# --- D-Bus (freedesktop) -------------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["linux", "freebsd"]
+cat = "networking"
+sev = "medium"
+fix = "D-Bus is Linux/BSD only in practice. macOS → launchd + XPC, Windows → COM. Hide behind cf_ipc_*()."
+rules = [
+  { id = "linux.dbus.libdbus",  api = "libdbus",             re = '#\s*include\s*<dbus/dbus\.h>|\bdbus_(connection_(send|open|get_private)|message_(new|new_method_call|iter_init))\w*\s*\(', msg = "Low-level libdbus." },
+  { id = "linux.dbus.gio",      api = "GDBus",               re = '\bg_dbus_(connection_new|proxy_new|message_new_(method_call|signal))\w*\s*\(', msg = "GLib GDBus wrapper." },
+  { id = "linux.dbus.qt",       api = "QDBus",               re = '#\s*include\s*<QDBus(Interface|Connection|Message|Reply)>', msg = "Qt QtDBus wrapper." },
+]
+
+# --- V4L2 / audio hardware ----------------------------------------------
+[[group]]
+lang = ["cfam"]
+os = ["linux"]
+cat = "input"
+sev = "high"
+fix = "Capture via SDL3 cameras (SDL_Camera in SDL3.2) or libcamera; GStreamer for pipelines."
+rules = [
+  { id = "linux.v4l2",       api = "V4L2 ioctls",          re = '#\s*include\s*<linux/videodev2\.h>|\bVIDIOC_(QUERYCAP|ENUM_FMT|S_FMT|G_FMT|REQBUFS|QBUF|DQBUF|STREAMON|STREAMOFF)\b', msg = "Video4Linux2 capture API." },
+  { id = "linux.alsa.header",api = "<alsa/asoundlib.h>",   re = '#\s*include\s*<alsa/asoundlib\.h>|\bsnd_pcm_(open|close|writei|readi|hw_params|prepare|drain)\s*\(', msg = "ALSA PCM API." },
+  { id = "linux.pulse",      api = "pulseaudio",           re = '#\s*include\s*<pulse/(pulseaudio|simple)\.h>|\bpa_(simple_new|simple_write|simple_read|context_connect)\s*\(', msg = "PulseAudio client API." },
+  { id = "linux.pipewire.simple", api = "pw_stream_new_simple", re = '\bpw_stream_new_simple\s*\(', msg = "PipeWire simple-API stream.", fix = "miniaudio / SDL3 audio for portable output." },
+]

@@ -161,3 +161,71 @@ rules = [
   { id = "plist.infoplist", api = "Info.plist", re = '<key>CFBundle(Identifier|Executable|Name)</key>', msg = "macOS/iOS bundle metadata.", once = true },
   { id = "plist.entitlements", api = "entitlements", re = '<key>com\.apple\.(security|developer)\.[\w.\-]+</key>', msg = "Apple sandbox / hardened-runtime entitlements.", once = true, sev = "medium", fix = "No equivalent on other OSes; document required permissions (Flatpak manifest permissions on Linux)." },
 ]
+
+# --- Apple Core frameworks beyond Foundation / AppKit --------------------
+[[group]]
+lang = ["objc", "swift", "cfam"]
+os = ["macos"]
+cat = "input"
+sev = "high"
+fix = "Core Bluetooth / Core Motion / Core Location are Apple-only. Hide behind a cf_*() shim: HIDAPI / bluez-dbus / libinput on other OSes."
+rules = [
+  { id = "mac.corebluetooth",  api = "CoreBluetooth",       re = '#\s*import\s*<CoreBluetooth/CoreBluetooth\.h>|\bCBCentralManager\b|\bCBPeripheral\b|\bCBUUID\b', msg = "Core Bluetooth (BLE)." },
+  { id = "mac.coremotion",     api = "CoreMotion",          re = '#\s*import\s*<CoreMotion/CoreMotion\.h>|\bCMMotionManager\b|\bCMDeviceMotion\b|\bCMAccelerometerData\b', msg = "Core Motion." },
+  { id = "mac.corelocation",   api = "CoreLocation",        re = '#\s*import\s*<CoreLocation/CoreLocation\.h>|\bCLLocationManager\b|\bCLGeocoder\b', msg = "Core Location." },
+  { id = "mac.gamecontroller.virtual", api = "GCVirtualController",      re = '\bGCVirtualController\b', msg = "On-screen virtual game controller (iOS/iPadOS).", fix = "No equivalent off Apple; implement with your own UI." },
+]
+
+# --- Swift / SwiftUI / Combine ------------------------------------------
+[[group]]
+lang = ["swift"]
+os = ["macos"]
+cat = "ui"
+sev = "blocker"
+fix = "Swift does not run on Windows/Linux/FreeBSD without the (unofficial) Swift Foundation + libdispatch ports. Port the UI to a cross-platform toolkit (SwiftUI-like declarative options: Compose Multiplatform, Flutter, React Native) or keep Swift and target macOS only."
+rules = [
+  { id = "swift.swiftui.view",  api = "SwiftUI View protocol", re = '@main\s+struct\s+\w+\s*:\s*App\b|: View\b', msg = "SwiftUI View / App protocol declaration (goes beyond the `import SwiftUI` line)." },
+  { id = "swift.combine.subject", api = "PassthroughSubject / CurrentValueSubject", re = '\bPassthroughSubject\b|\bCurrentValueSubject\b|AnyCancellable|@Published\b', msg = "Combine subject / publisher types (specific uses, not just `import Combine`)." },
+  { id = "swift.async",         api = "async / await",       re = '\basync\s+(throws\s+)?(->|\{)|\bawait\s+\w+', msg = "Swift structured concurrency.", sev = "medium" },
+  { id = "swift.observable",    api = "@Observable / @State",re = '@(Observable|State|Binding|StateObject|ObservedObject|EnvironmentObject|FocusState|AppStorage|SceneStorage)\b', msg = "SwiftUI property wrappers." },
+  { id = "swift.pkg.manifest",  api = "Package.swift",       re = '//\s*swift-tools-version:', msg = "Swift Package Manager manifest.", cat = "build", once = true, lang = ["swift"], fix = "Mirror with a CMakeLists.txt (or Bazel BUILD) for non-Darwin targets." },
+]
+
+# --- UIKit / iOS ---------------------------------------------------------
+[[group]]
+lang = ["objc", "swift"]
+os = ["macos"]
+cat = "ui"
+sev = "blocker"
+fix = "UIKit is iOS/iPadOS/tvOS only. For cross-platform mobile port to Flutter / React Native / Kotlin Multiplatform."
+rules = [
+  { id = "mac.uikit",           api = "UIKit",               re = '#\s*import\s*<UIKit/UIKit\.h>|import\s+UIKit|\b(UIView(Controller)?|UIApplication|UIWindow|UIButton|UILabel)\b', msg = "UIKit." },
+  { id = "mac.watchkit",        api = "WatchKit",            re = 'import\s+WatchKit|\b(WKInterfaceController|WKExtensionDelegate)\b', msg = "WatchKit." },
+  { id = "mac.appintents",      api = "App Intents",         re = 'import\s+AppIntents|\b(AppIntent|AppShortcutsProvider)\b', msg = "App Intents (Shortcuts) framework.", sev = "medium" },
+]
+
+# --- Security / Keychain / CryptoKit -------------------------------------
+[[group]]
+lang = ["cfam", "objc", "swift"]
+os = ["macos"]
+cat = "other"
+sev = "high"
+fix = "Store secrets in: libsecret / GNOME Keyring (Linux), Credential Manager (Windows), a file-backed keyring on FreeBSD; hide behind cf_secret_*()."
+rules = [
+  { id = "mac.keychain.sec",    api = "Security.framework",  re = '#\s*import\s*<Security/Security\.h>|\bSec(KeychainItem|ItemCopyMatching|ItemAdd|AccessControl|Random)\w*\s*\(', msg = "macOS Security framework (keychain + crypto primitives)." },
+  { id = "mac.cryptokit",       api = "CryptoKit",           re = 'import\s+CryptoKit|\b(SymmetricKey|ChaChaPoly|AES\.GCM|Curve25519|P256|SHA256|HMAC|HKDF)\b', msg = "Swift CryptoKit.", fix = "Use libsodium / BoringSSL / OpenSSL EVP APIs for portability." },
+  { id = "mac.commoncrypto",    api = "CommonCrypto",        re = '#\s*include\s*<CommonCrypto/CommonCrypto\.h>|\bCCCrypt\w*\s*\(|\bCC_SHA256\b|\bCC_MD5\b', msg = "Apple CommonCrypto.", fix = "Use libsodium / BoringSSL (OpenSSL EVP) for portability." },
+  { id = "mac.localauth",       api = "LocalAuthentication", re = 'import\s+LocalAuthentication|\bLAContext\b|\.canEvaluatePolicy', msg = "Face ID / Touch ID.", sev = "medium" },
+]
+
+# --- StoreKit / in-app purchase -----------------------------------------
+[[group]]
+lang = ["objc", "swift"]
+os = ["macos"]
+cat = "other"
+sev = "high"
+fix = "App Store only; Steam/Itch/direct have their own SDKs (Steamworks, Epic Online Services). Abstract behind a store-neutral purchases interface."
+rules = [
+  { id = "mac.storekit1",       api = "StoreKit 1 (SKProduct)", re = 'import\s+StoreKit|\bSK(Product|Payment(Queue)?|StoreObserver)\b', msg = "StoreKit 1 — Apple in-app purchases." },
+  { id = "mac.storekit2",       api = "StoreKit 2",              re = '\b(Product\.products|Transaction\.(updates|currentEntitlements|all))\b', msg = "StoreKit 2." },
+]

@@ -20,7 +20,7 @@ Point it at your source code. It maps every OS-specific call, asks a few questio
 ## What it does
 
 1. **Source** — pick a project folder. Say which OS it was written for, or let Crossfire detect.
-2. **Analyze** — scans every file against **599 rules** covering Win32, DirectX, Cocoa/Metal, X11/Wayland, ALSA/PulseAudio, kqueue/epoll, registry, filesystem paths, threading, timing, language-level APIs (C#, Python, Go, Rust, Java, Node), and game engines (Unity, Unreal, Godot, Love2D). You get a portability score, a heat map, and a suggested replacement for every finding per target OS.
+2. **Analyze** — scans every file against **674 rules** covering Win32, DirectX, Cocoa/Metal, X11/Wayland, ALSA/PulseAudio, kqueue/epoll, registry, filesystem paths, threading, timing, language-level APIs (C#, Python, Go, Rust, Java, Node), and game engines (Unity, Unreal, Godot, Love2D). You get a portability score, a heat map, and a suggested replacement for every finding per target OS.
 3. **Targets** — pick any of Windows, macOS, Linux, FreeBSD.
 4. **Configure** — questions based on what was found: porting strategy (SDL3 portability layer, native per OS, translation layer, hybrid), graphics + audio backends, build system, C++ standard, packaging, CI, AI.
 5. **Convert** — writes a new copy; never touches the original. Mechanical rule-based rewrites + a portability shim + CMake/CI/packaging + optional AI pass for the hardest files + `CROSSFIRE_REPORT.md` of every change.
@@ -33,7 +33,7 @@ Each of these is a claim about what the tool and the repo actually do **today**,
 
 ### Conversion
 
-1. **599 rules** across 9 TOML tables (`win32`, `directx`, `macos`, `linux`, `bsd`, `posix`, `languages`, `engines`, `build`). `crossfire-engine rules | jq length` confirms the count.
+1. **674 rules** across 9 TOML tables (`win32`, `directx`, `macos`, `linux`, `bsd`, `posix`, `languages`, `engines`, `build`). `crossfire-engine rules | jq length` confirms the count.
 2. **All four target OSes** (Windows, macOS, Linux, FreeBSD) convertible from any source OS.
 3. **Deterministic mechanical rewrites** for the cases where the target has a direct replacement (sleep, timers, aligned alloc, path separators, include guards).
 4. **Per-file portability score + heat map** shipped in the `ScanReport` JSON.
@@ -142,7 +142,7 @@ crossfire/
 ├── ui/                        React + TypeScript GUI (shared by both shells)
 ├── engine/                    Rust engine
 │   ├── src/                     scan, rules, questions, convert, AI, toolchains, build, GPTK
-│   └── src/rules/*.toml         9 tables, 599 rules
+│   └── src/rules/*.toml         9 tables, 674 rules
 ├── apps/tauri/                Main app: Tauri 2, engine linked in-process
 ├── apps/electron/             Backup app: Electron, engine runs as a sidecar CLI
 └── .github/workflows/

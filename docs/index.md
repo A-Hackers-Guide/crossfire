@@ -7,7 +7,7 @@ Point Crossfire at your source code. It maps every OS-specific call, asks a few 
 ## In one picture
 
 1. **Source** — pick a project folder.
-2. **Analyze** — 599 rules scan for Win32, DirectX, Cocoa/Metal, X11/Wayland, ALSA/PulseAudio, kqueue/epoll, registry, filesystem paths, threading, timing, C#/Python/Go/Rust/Java/Node, and the big game engines.
+2. **Analyze** — 674 rules scan for Win32, DirectX, Cocoa/Metal, X11/Wayland, ALSA/PulseAudio, kqueue/epoll, registry, filesystem paths, threading, timing, C#/Python/Go/Rust/Java/Node, and the big game engines.
 3. **Targets** — tick the OSes you want to support.
 4. **Configure** — questions appear based on what was found: porting strategy (SDL3 portability layer, native per OS, translation layer, hybrid), graphics and audio backends, build system, C++ standard, packaging, CI, AI.
 5. **Convert** — writes a new copy. Mechanical rewrites + a portability shim + generated CMake + packaging + a GitHub Actions workflow that builds all four OSes. Optional AI pass for the hard files.
