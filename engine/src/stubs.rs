@@ -57,7 +57,9 @@ pub fn strip_comments(src: &str) -> String {
     out
 }
 
-const NOT_FUNCS: &[&str] = &["if", "for", "while", "switch", "return", "else", "do", "sizeof", "case", "catch"];
+const NOT_FUNCS: &[&str] = &[
+    "if", "for", "while", "switch", "return", "else", "do", "sizeof", "case", "catch",
+];
 
 /// Top-level, non-static function definitions (column-0 heuristics).
 pub fn function_definitions(src: &str) -> Vec<FnSig> {
@@ -68,7 +70,13 @@ pub fn function_definitions(src: &str) -> Vec<FnSig> {
     // Drop preprocessor lines so `#define F(x) {` is not mistaken for a function.
     let clean: String = clean
         .lines()
-        .map(|l| if l.trim_start().starts_with('#') { "" } else { l })
+        .map(|l| {
+            if l.trim_start().starts_with('#') {
+                ""
+            } else {
+                l
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let mut v = Vec::new();
@@ -79,13 +87,18 @@ pub fn function_definitions(src: &str) -> Vec<FnSig> {
         if ret.is_empty()
             || NOT_FUNCS.contains(&first)
             || NOT_FUNCS.contains(&name.as_str())
-            || ret.split_whitespace().any(|w| matches!(w, "static" | "typedef" | "inline" | "constexpr"))
+            || ret
+                .split_whitespace()
+                .any(|w| matches!(w, "static" | "typedef" | "inline" | "constexpr"))
             || ret.contains("inline")
         {
             continue;
         }
         let params = c[3].split_whitespace().collect::<Vec<_>>().join(" ");
-        if !v.iter().any(|s: &FnSig| s.name == name && s.params == params) {
+        if !v
+            .iter()
+            .any(|s: &FnSig| s.name == name && s.params == params)
+        {
             v.push(FnSig { ret, name, params });
         }
     }
@@ -99,14 +112,34 @@ fn is_entry(name: &str) -> bool {
 /// Strip calling-convention / linkage words so the type can declare a local.
 fn value_type(ret: &str) -> String {
     ret.split_whitespace()
-        .filter(|w| !matches!(*w, "WINAPI" | "CALLBACK" | "APIENTRY" | "__stdcall" | "__cdecl" | "extern" | "\"C\"" | "CF_EXPORT" | "CF_IMPORT" | "virtual"))
+        .filter(|w| {
+            !matches!(
+                *w,
+                "WINAPI"
+                    | "CALLBACK"
+                    | "APIENTRY"
+                    | "__stdcall"
+                    | "__cdecl"
+                    | "extern"
+                    | "\"C\""
+                    | "CF_EXPORT"
+                    | "CF_IMPORT"
+                    | "virtual"
+            )
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
 
 /// Generate a stub translation unit for `rel` (original source text `src`).
 /// `includes` are project-root-relative header paths to include.
-pub fn generate_stub(rel: &str, src: &str, cpp: bool, includes: &[String], os_label: &str) -> (String, Vec<String>) {
+pub fn generate_stub(
+    rel: &str,
+    src: &str,
+    cpp: bool,
+    includes: &[String],
+    os_label: &str,
+) -> (String, Vec<String>) {
     let sigs = function_definitions(src);
     let mut s = String::new();
     s.push_str(&format!(
@@ -140,7 +173,10 @@ pub fn generate_stub(rel: &str, src: &str, cpp: bool, includes: &[String], os_la
         } else {
             format!("    {vt} cf_r;\n    memset(&cf_r, 0, sizeof cf_r);\n    return cf_r;\n")
         };
-        s.push_str(&format!("{} {}({}) {{\n    cf_stub_warn(\"{}\", \"{rel}\");\n{body}}}\n\n", f.ret, f.name, f.params, f.name));
+        s.push_str(&format!(
+            "{} {}({}) {{\n    cf_stub_warn(\"{}\", \"{rel}\");\n{body}}}\n\n",
+            f.ret, f.name, f.params, f.name
+        ));
     }
     (s, names)
 }
@@ -160,7 +196,13 @@ mod tests {
 
     #[test]
     fn stub_compiles_shape() {
-        let (s, names) = generate_stub("src/a.c", "float audio_level(void) { return 1; }\nchar *name(void) { return 0; }\n", false, &["src/a.h".into()], "Linux");
+        let (s, names) = generate_stub(
+            "src/a.c",
+            "float audio_level(void) { return 1; }\nchar *name(void) { return 0; }\n",
+            false,
+            &["src/a.h".into()],
+            "Linux",
+        );
         assert_eq!(names, vec!["audio_level", "name"]);
         assert!(s.contains("float cf_r;"));
         assert!(s.contains("return NULL;"));

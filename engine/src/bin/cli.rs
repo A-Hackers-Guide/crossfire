@@ -6,13 +6,19 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use crossfire_engine::{self as engine, BuildRequest, ConvertRequest, Os, ProgressEvent, ScanReport};
+use crossfire_engine::{
+    self as engine, BuildRequest, ConvertRequest, Os, ProgressEvent, ScanReport,
+};
 use serde::Serialize;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "crossfire-engine", version, about = "Crossfire conversion engine")]
+#[command(
+    name = "crossfire-engine",
+    version,
+    about = "Crossfire conversion engine"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -71,16 +77,19 @@ fn run(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Scan { path } => print(&engine::scan(&path, &emit)?),
         Cmd::Questions { scan, targets } => {
-            let report: ScanReport = serde_json::from_str(&read_input(&scan)?).context("parsing scan report")?;
+            let report: ScanReport =
+                serde_json::from_str(&read_input(&scan)?).context("parsing scan report")?;
             let targets: Vec<Os> = targets.split(',').filter_map(Os::parse).collect();
             print(&engine::questions(&report, &targets))
         }
         Cmd::Convert { request } => {
-            let req: ConvertRequest = serde_json::from_str(&read_input(&request)?).context("parsing convert request")?;
+            let req: ConvertRequest =
+                serde_json::from_str(&read_input(&request)?).context("parsing convert request")?;
             print(&engine::convert(&req, &emit)?)
         }
         Cmd::Build { request } => {
-            let req: BuildRequest = serde_json::from_str(&read_input(&request)?).context("parsing build request")?;
+            let req: BuildRequest =
+                serde_json::from_str(&read_input(&request)?).context("parsing build request")?;
             print(&engine::build(&req, &emit)?)
         }
         Cmd::Toolchains => print(&engine::toolchains()),
@@ -94,7 +103,12 @@ fn main() {
     let cli = Cli::parse();
     if let Err(e) = run(cli) {
         let msg = format!("{e:#}");
-        emit(ProgressEvent::new(engine::Stage::Scan, engine::Level::Error, -1.0, msg.clone()));
+        emit(ProgressEvent::new(
+            engine::Stage::Scan,
+            engine::Level::Error,
+            -1.0,
+            msg.clone(),
+        ));
         let _ = print(&serde_json::json!({ "error": msg }));
         std::process::exit(1);
     }

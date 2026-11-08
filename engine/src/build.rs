@@ -43,7 +43,10 @@ fn detect_kind(project: &Path) -> BuildKind {
     if has("Cargo.toml") {
         return BuildKind::Cargo;
     }
-    if let Some(p) = first_with_ext("csproj").or_else(|| first_with_ext("fsproj")).or_else(|| first_with_ext("sln")) {
+    if let Some(p) = first_with_ext("csproj")
+        .or_else(|| first_with_ext("fsproj"))
+        .or_else(|| first_with_ext("sln"))
+    {
         return BuildKind::DotNet { project: p };
     }
     if has("go.mod") {
@@ -56,7 +59,11 @@ fn detect_kind(project: &Path) -> BuildKind {
         return BuildKind::Make;
     }
     if has("main.py") || first_with_ext("py").is_some() {
-        let entry = if has("main.py") { "main.py".to_string() } else { first_with_ext("py").unwrap_or_default() };
+        let entry = if has("main.py") {
+            "main.py".to_string()
+        } else {
+            first_with_ext("py").unwrap_or_default()
+        };
         return BuildKind::Python { entry };
     }
     BuildKind::Other
@@ -74,8 +81,19 @@ fn host_arch() -> &'static str {
 fn ensure_workflow(project: &Path, kind: &BuildKind, targets: &[Os]) -> Option<String> {
     let p = project.join(WORKFLOW);
     if !p.is_file() {
-        let name = project.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "app".into());
-        let wf = templates::workflow(&CiPlan { name: &name, kind, targets, apt: vec![], pkg: vec![], sdl3: false, packages: &[] });
+        let name = project
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "app".into());
+        let wf = templates::workflow(&CiPlan {
+            name: &name,
+            kind,
+            targets,
+            apt: vec![],
+            pkg: vec![],
+            sdl3: false,
+            packages: &[],
+        });
         std::fs::create_dir_all(p.parent()?).ok()?;
         std::fs::write(&p, wf).ok()?;
     }
@@ -88,21 +106,46 @@ pub fn build(req: &BuildRequest, on: &dyn Fn(ProgressEvent)) -> Result<BuildResu
         bail!("project {} is not a directory", project.display());
     }
     let project = project.canonicalize()?;
-    let targets: Vec<Os> = if req.targets.is_empty() { vec![Os::host()] } else { req.targets.clone() };
+    let targets: Vec<Os> = if req.targets.is_empty() {
+        vec![Os::host()]
+    } else {
+        req.targets.clone()
+    };
     let kind = detect_kind(&project);
-    on(ProgressEvent::new(Stage::Build, Level::Info, 0.0, format!("Building {} ({kind:?}) for {}", project.display(), targets.iter().map(|o| o.label()).collect::<Vec<_>>().join(", "))));
+    on(ProgressEvent::new(
+        Stage::Build,
+        Level::Info,
+        0.0,
+        format!(
+            "Building {} ({kind:?}) for {}",
+            project.display(),
+            targets
+                .iter()
+                .map(|o| o.label())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    ));
     let ci = ensure_workflow(&project, &kind, &targets);
     let mut results = Vec::new();
     for (i, t) in targets.iter().enumerate() {
-        on(ProgressEvent::new(Stage::Build, Level::Info, i as f64 / targets.len() as f64, format!("Target {}", t.label())));
+        on(ProgressEvent::new(
+            Stage::Build,
+            Level::Info,
+            i as f64 / targets.len() as f64,
+            format!("Target {}", t.label()),
+        ));
         let started = SystemTime::now();
         let mut r = build_target(&project, &kind, *t, req.release, on);
         if r.status == BuildStatus::Success {
             if r.artifacts.is_empty() {
-                r.artifacts = find_artifacts(&project.join("build").join(format!("crossfire-{}", t.id())), started)
-                    .into_iter()
-                    .chain(find_artifacts(&project, started))
-                    .collect();
+                r.artifacts = find_artifacts(
+                    &project.join("build").join(format!("crossfire-{}", t.id())),
+                    started,
+                )
+                .into_iter()
+                .chain(find_artifacts(&project, started))
+                .collect();
                 r.artifacts.sort();
                 r.artifacts.dedup();
             }
@@ -121,14 +164,41 @@ pub fn build(req: &BuildRequest, on: &dyn Fn(ProgressEvent)) -> Result<BuildResu
             BuildStatus::Failed => Level::Error,
             _ => Level::Warn,
         };
-        on(ProgressEvent::new(Stage::Build, level, (i + 1) as f64 / targets.len() as f64, format!("{}: {:?}{}", t.label(), r.status, r.reason.as_ref().map(|x| format!(" ({x})")).unwrap_or_default())));
+        on(ProgressEvent::new(
+            Stage::Build,
+            level,
+            (i + 1) as f64 / targets.len() as f64,
+            format!(
+                "{}: {:?}{}",
+                t.label(),
+                r.status,
+                r.reason
+                    .as_ref()
+                    .map(|x| format!(" ({x})"))
+                    .unwrap_or_default()
+            ),
+        ));
         results.push(r);
     }
-    Ok(BuildResult { results, ci_workflow: ci })
+    Ok(BuildResult {
+        results,
+        ci_workflow: ci,
+    })
 }
 
-fn result(target: Os, status: BuildStatus, log: String, reason: Option<String>) -> BuildTargetResult {
-    BuildTargetResult { target, status, artifacts: vec![], log, reason }
+fn result(
+    target: Os,
+    status: BuildStatus,
+    log: String,
+    reason: Option<String>,
+) -> BuildTargetResult {
+    BuildTargetResult {
+        target,
+        status,
+        artifacts: vec![],
+        log,
+        reason,
+    }
 }
 
 fn ci(target: Os, reason: impl Into<String>) -> BuildTargetResult {
@@ -136,75 +206,163 @@ fn ci(target: Os, reason: impl Into<String>) -> BuildTargetResult {
 }
 
 /// Run a sequence of commands, stopping at the first failure.
-fn run_all(target: Os, cmds: Vec<Command>, on: &dyn Fn(ProgressEvent), reason: Option<String>) -> BuildTargetResult {
+fn run_all(
+    target: Os,
+    cmds: Vec<Command>,
+    on: &dyn Fn(ProgressEvent),
+    reason: Option<String>,
+) -> BuildTargetResult {
     let mut log = String::new();
     for c in cmds {
         let o = run_streaming(c, Stage::Build, on, None);
         log.push_str(&o.log);
         if !o.success {
-            return result(target, BuildStatus::Failed, log, Some(format!("command failed (exit {:?})", o.code)));
+            return result(
+                target,
+                BuildStatus::Failed,
+                log,
+                Some(format!("command failed (exit {:?})", o.code)),
+            );
         }
     }
     result(target, BuildStatus::Success, log, reason)
 }
 
-fn build_target(project: &Path, kind: &BuildKind, t: Os, release: bool, on: &dyn Fn(ProgressEvent)) -> BuildTargetResult {
+fn build_target(
+    project: &Path,
+    kind: &BuildKind,
+    t: Os,
+    release: bool,
+    on: &dyn Fn(ProgressEvent),
+) -> BuildTargetResult {
     let host = Os::host();
     let cfg = if release { "Release" } else { "Debug" };
     match kind {
         BuildKind::CMake => cmake_target(project, t, cfg, on),
         BuildKind::Meson => {
             if t != host {
-                return ci(t, "Meson cross files are not generated; cross builds run in CI");
+                return ci(
+                    t,
+                    "Meson cross files are not generated; cross builds run in CI",
+                );
             }
-            let Some(meson) = which("meson") else { return ci(t, "meson not installed") };
+            let Some(meson) = which("meson") else {
+                return ci(t, "meson not installed");
+            };
             let bdir = project.join(format!("build/crossfire-{}", t.id()));
             let mut setup = Command::new(&meson);
-            setup.args(["setup", "--reconfigure"]).arg(&bdir).arg(format!("--buildtype={}", if release { "release" } else { "debug" })).current_dir(project);
+            setup
+                .args(["setup", "--reconfigure"])
+                .arg(&bdir)
+                .arg(format!(
+                    "--buildtype={}",
+                    if release { "release" } else { "debug" }
+                ))
+                .current_dir(project);
             let mut comp = Command::new(&meson);
-            comp.arg("compile").arg("-C").arg(&bdir).current_dir(project);
+            comp.arg("compile")
+                .arg("-C")
+                .arg(&bdir)
+                .current_dir(project);
             run_all(t, vec![setup, comp], on, None)
         }
         BuildKind::Make => {
             if t != host {
                 return ci(t, "Makefile builds only for the host");
             }
-            let make = if host == Os::Freebsd { which("gmake").or_else(|| which("make")) } else { which("make") };
-            let Some(make) = make else { return ci(t, "make not installed") };
+            let make = if host == Os::Freebsd {
+                which("gmake").or_else(|| which("make"))
+            } else {
+                which("make")
+            };
+            let Some(make) = make else {
+                return ci(t, "make not installed");
+            };
             let mut c = Command::new(make);
             c.arg("-j4").current_dir(project);
             run_all(t, vec![c], on, None)
         }
         BuildKind::Cargo => cargo_target(project, t, release, on),
         BuildKind::DotNet { project: proj } => {
-            let Some(dotnet) = which("dotnet") else { return ci(t, ".NET SDK not installed") };
-            let rid = match t {
-                Os::Windows => "win-x64".to_string(),
-                Os::Macos => format!("osx-{}", if host_arch() == "aarch64" { "arm64" } else { "x64" }),
-                Os::Linux => "linux-x64".to_string(),
-                Os::Freebsd => return ci(t, "no official .NET runtime identifier for FreeBSD (community builds only)"),
+            let Some(dotnet) = which("dotnet") else {
+                return ci(t, ".NET SDK not installed");
             };
+            let rid =
+                match t {
+                    Os::Windows => "win-x64".to_string(),
+                    Os::Macos => format!(
+                        "osx-{}",
+                        if host_arch() == "aarch64" {
+                            "arm64"
+                        } else {
+                            "x64"
+                        }
+                    ),
+                    Os::Linux => "linux-x64".to_string(),
+                    Os::Freebsd => return ci(
+                        t,
+                        "no official .NET runtime identifier for FreeBSD (community builds only)",
+                    ),
+                };
             let outdir = project.join(format!("build/crossfire-{}", t.id()));
             let mut c = Command::new(dotnet);
-            c.arg("publish").arg(proj).args(["-c", cfg, "-r", &rid, "--self-contained", "true", "-p:EnableWindowsTargeting=true", "-o"]).arg(&outdir).current_dir(project);
+            c.arg("publish")
+                .arg(proj)
+                .args([
+                    "-c",
+                    cfg,
+                    "-r",
+                    &rid,
+                    "--self-contained",
+                    "true",
+                    "-p:EnableWindowsTargeting=true",
+                    "-o",
+                ])
+                .arg(&outdir)
+                .current_dir(project);
             run_all(t, vec![c], on, None)
         }
         BuildKind::Go => {
-            let Some(go) = which("go") else { return ci(t, "Go not installed") };
+            let Some(go) = which("go") else {
+                return ci(t, "Go not installed");
+            };
             let uses_cgo = dir_contains(project, "go", "import \"C\"");
             if uses_cgo && t != host {
-                return ci(t, "package uses cgo; cross-compiling needs a C toolchain per target");
+                return ci(
+                    t,
+                    "package uses cgo; cross-compiling needs a C toolchain per target",
+                );
             }
             let (goos, arch) = match t {
                 Os::Windows => ("windows", "amd64"),
-                Os::Macos => ("darwin", if host_arch() == "aarch64" { "arm64" } else { "amd64" }),
+                Os::Macos => (
+                    "darwin",
+                    if host_arch() == "aarch64" {
+                        "arm64"
+                    } else {
+                        "amd64"
+                    },
+                ),
                 Os::Linux => ("linux", "amd64"),
                 Os::Freebsd => ("freebsd", "amd64"),
             };
-            let name = project.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "app".into());
-            let out = project.join(format!("build/crossfire-{}/{}{}", t.id(), name, if t == Os::Windows { ".exe" } else { "" }));
+            let name = project
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "app".into());
+            let out = project.join(format!(
+                "build/crossfire-{}/{}{}",
+                t.id(),
+                name,
+                if t == Os::Windows { ".exe" } else { "" }
+            ));
             let mut c = Command::new(go);
-            c.args(["build", "-o"]).arg(&out).arg(".").current_dir(project).env("GOOS", goos).env("GOARCH", arch);
+            c.args(["build", "-o"])
+                .arg(&out)
+                .arg(".")
+                .current_dir(project)
+                .env("GOOS", goos)
+                .env("GOARCH", arch);
             if !uses_cgo {
                 c.env("CGO_ENABLED", "0");
             }
@@ -214,13 +372,26 @@ fn build_target(project: &Path, kind: &BuildKind, t: Os, release: bool, on: &dyn
             if t != host {
                 return ci(t, "Node/Electron packages are built per OS in CI");
             }
-            let Some(npm) = which("npm") else { return ci(t, "npm not installed") };
+            let Some(npm) = which("npm") else {
+                return ci(t, "npm not installed");
+            };
             let pkg = std::fs::read_to_string(project.join("package.json")).unwrap_or_default();
             if !pkg.contains("\"build\"") {
-                return result(t, BuildStatus::Skipped, String::new(), Some("package.json has no build script".into()));
+                return result(
+                    t,
+                    BuildStatus::Skipped,
+                    String::new(),
+                    Some("package.json has no build script".into()),
+                );
             }
             let mut install = Command::new(&npm);
-            install.arg(if project.join("package-lock.json").is_file() { "ci" } else { "install" }).current_dir(project);
+            install
+                .arg(if project.join("package-lock.json").is_file() {
+                    "ci"
+                } else {
+                    "install"
+                })
+                .current_dir(project);
             let mut b = Command::new(&npm);
             b.args(["run", "build"]).current_dir(project);
             run_all(t, vec![install, b], on, None)
@@ -233,23 +404,45 @@ fn build_target(project: &Path, kind: &BuildKind, t: Os, release: bool, on: &dyn
                 return result(t, BuildStatus::Skipped, String::new(), Some("PyInstaller not installed (pip install pyinstaller); Python sources run as-is".into()));
             };
             let mut c = Command::new(pyi);
-            c.args(["--onefile", "--noconfirm", "--distpath"]).arg(project.join(format!("build/crossfire-{}", t.id()))).args(["--workpath"]).arg(project.join("build/pyinstaller")).arg(entry).current_dir(project);
+            c.args(["--onefile", "--noconfirm", "--distpath"])
+                .arg(project.join(format!("build/crossfire-{}", t.id())))
+                .args(["--workpath"])
+                .arg(project.join("build/pyinstaller"))
+                .arg(entry)
+                .current_dir(project);
             run_all(t, vec![c], on, None)
         }
-        BuildKind::Engine(e) => result(t, BuildStatus::Skipped, String::new(), Some(format!("{e} projects are exported from the editor (export presets) or in CI"))),
-        BuildKind::Other => result(t, BuildStatus::Skipped, String::new(), Some("no supported build system found".into())),
+        BuildKind::Engine(e) => result(
+            t,
+            BuildStatus::Skipped,
+            String::new(),
+            Some(format!(
+                "{e} projects are exported from the editor (export presets) or in CI"
+            )),
+        ),
+        BuildKind::Other => result(
+            t,
+            BuildStatus::Skipped,
+            String::new(),
+            Some("no supported build system found".into()),
+        ),
     }
 }
 
 fn dir_contains(dir: &Path, ext: &str, needle: &str) -> bool {
-    let Ok(rd) = std::fs::read_dir(dir) else { return false };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return false;
+    };
     rd.flatten().any(|e| {
         let p = e.path();
         if p.is_dir() {
             let n = e.file_name().to_string_lossy().to_string();
             !n.starts_with('.') && n != "vendor" && n != "build" && dir_contains(&p, ext, needle)
         } else {
-            p.extension().and_then(|x| x.to_str()) == Some(ext) && std::fs::read_to_string(&p).map(|s| s.contains(needle)).unwrap_or(false)
+            p.extension().and_then(|x| x.to_str()) == Some(ext)
+                && std::fs::read_to_string(&p)
+                    .map(|s| s.contains(needle))
+                    .unwrap_or(false)
         }
     })
 }
@@ -287,11 +480,17 @@ fn zig_toolchain(bdir: &Path, zig: &Path, t: Os, triple: &str) -> std::io::Resul
     let wrap = |name: &str, sub: &str| -> std::io::Result<PathBuf> {
         if cfg!(windows) {
             let p = tc.join(format!("{name}.cmd"));
-            std::fs::write(&p, format!("@echo off\r\n\"{}\" {sub} %*\r\n", zig.display()))?;
+            std::fs::write(
+                &p,
+                format!("@echo off\r\n\"{}\" {sub} %*\r\n", zig.display()),
+            )?;
             Ok(p)
         } else {
             let p = tc.join(name);
-            std::fs::write(&p, format!("#!/bin/sh\nexec \"{}\" {sub} \"$@\"\n", zig.display()))?;
+            std::fs::write(
+                &p,
+                format!("#!/bin/sh\nexec \"{}\" {sub} \"$@\"\n", zig.display()),
+            )?;
             make_exec(&p);
             Ok(p)
         }
@@ -332,7 +531,10 @@ fn mingw_toolchain(bdir: &Path) -> std::io::Result<PathBuf> {
 fn workflow_apt(project: &Path) -> String {
     let wf = std::fs::read_to_string(project.join(WORKFLOW)).unwrap_or_default();
     wf.lines()
-        .find_map(|l| l.split_once("apt-get install -y ").map(|(_, r)| r.trim().to_string()))
+        .find_map(|l| {
+            l.split_once("apt-get install -y ")
+                .map(|(_, r)| r.trim().to_string())
+        })
         .unwrap_or_default()
 }
 
@@ -345,7 +547,11 @@ fn cmake_target(project: &Path, t: Os, cfg: &str, on: &dyn Fn(ProgressEvent)) ->
     let ninja = which("ninja");
     let configure = |extra: Vec<String>| {
         let mut c = Command::new(&cmake);
-        c.arg("-S").arg(project).arg("-B").arg(&bdir).arg(format!("-DCMAKE_BUILD_TYPE={cfg}"));
+        c.arg("-S")
+            .arg(project)
+            .arg("-B")
+            .arg(&bdir)
+            .arg(format!("-DCMAKE_BUILD_TYPE={cfg}"));
         if ninja.is_some() && !(host == Os::Windows && t == Os::Windows) {
             c.args(["-G", "Ninja"]);
         }
@@ -354,14 +560,24 @@ fn cmake_target(project: &Path, t: Os, cfg: &str, on: &dyn Fn(ProgressEvent)) ->
     };
     let build = || {
         let mut c = Command::new(&cmake);
-        c.arg("--build").arg(&bdir).args(["--config", cfg, "--parallel"]);
+        c.arg("--build")
+            .arg(&bdir)
+            .args(["--config", cfg, "--parallel"]);
         c
     };
     if t == host {
-        return run_all(t, vec![configure(vec![]), build()], on, Some("native host build".into()));
+        return run_all(
+            t,
+            vec![configure(vec![]), build()],
+            on,
+            Some("native host build".into()),
+        );
     }
     if t == Os::Macos {
-        return ci(t, "macOS binaries can only be built on a macOS host (Xcode SDK + codesign)");
+        return ci(
+            t,
+            "macOS binaries can only be built on a macOS host (Xcode SDK + codesign)",
+        );
     }
     // Cross-compile: zig first (all three non-Apple targets), then mingw for Windows.
     if let (Some(zig), Some(triple)) = (which("zig"), zig_triple(t)) {
@@ -378,14 +594,25 @@ fn cmake_target(project: &Path, t: Os, cfg: &str, on: &dyn Fn(ProgressEvent)) ->
                 }
                 return r;
             }
-            Err(e) => on(ProgressEvent::new(Stage::Build, Level::Warn, -1.0, format!("zig toolchain setup failed: {e}"))),
+            Err(e) => on(ProgressEvent::new(
+                Stage::Build,
+                Level::Warn,
+                -1.0,
+                format!("zig toolchain setup failed: {e}"),
+            )),
         }
     }
     if t == Os::Windows && which("x86_64-w64-mingw32-gcc").is_some() {
         if let Ok(tc) = mingw_toolchain(&bdir) {
             return run_all(
                 t,
-                vec![configure(vec![format!("-DCMAKE_TOOLCHAIN_FILE={}", tc.display()), "-DCF_USE_SDL3=OFF".into()]), build()],
+                vec![
+                    configure(vec![
+                        format!("-DCMAKE_TOOLCHAIN_FILE={}", tc.display()),
+                        "-DCF_USE_SDL3=OFF".into(),
+                    ]),
+                    build(),
+                ],
                 on,
                 Some("cross-compiled with MinGW-w64".into()),
             );
@@ -398,24 +625,64 @@ fn cmake_target(project: &Path, t: Os, cfg: &str, on: &dyn Fn(ProgressEvent)) ->
                 "apt-get update -qq && apt-get install -y -qq build-essential cmake ninja-build pkg-config git {apt} && cmake -S . -B build/crossfire-linux -G Ninja -DCMAKE_BUILD_TYPE={cfg} && cmake --build build/crossfire-linux --parallel"
             );
             let mut c = Command::new(docker);
-            c.args(["run", "--rm", "-v"]).arg(format!("{}:/src", project.display())).args(["-w", "/src", "ubuntu:24.04", "bash", "-lc", &script]);
-            return run_all(t, vec![c], on, Some("built in an ubuntu:24.04 container".into()));
+            c.args(["run", "--rm", "-v"])
+                .arg(format!("{}:/src", project.display()))
+                .args(["-w", "/src", "ubuntu:24.04", "bash", "-lc", &script]);
+            return run_all(
+                t,
+                vec![c],
+                on,
+                Some("built in an ubuntu:24.04 container".into()),
+            );
         }
     }
-    ci(t, format!("no cross toolchain for {} on this {} host (install zig{})", t.label(), host.label(), if t == Os::Windows { " or mingw-w64" } else if t == Os::Linux { " or docker" } else { "" }))
+    ci(
+        t,
+        format!(
+            "no cross toolchain for {} on this {} host (install zig{})",
+            t.label(),
+            host.label(),
+            if t == Os::Windows {
+                " or mingw-w64"
+            } else if t == Os::Linux {
+                " or docker"
+            } else {
+                ""
+            }
+        ),
+    )
 }
 
 fn rust_triple(t: Os) -> String {
     match t {
-        Os::Windows => if Os::host() == Os::Windows { "x86_64-pc-windows-msvc" } else { "x86_64-pc-windows-gnu" }.into(),
+        Os::Windows => if Os::host() == Os::Windows {
+            "x86_64-pc-windows-msvc"
+        } else {
+            "x86_64-pc-windows-gnu"
+        }
+        .into(),
         Os::Macos => format!("{}-apple-darwin", host_arch()),
-        Os::Linux => format!("{}-unknown-linux-gnu", if Os::host() == Os::Linux { host_arch() } else { "x86_64" }),
+        Os::Linux => format!(
+            "{}-unknown-linux-gnu",
+            if Os::host() == Os::Linux {
+                host_arch()
+            } else {
+                "x86_64"
+            }
+        ),
         Os::Freebsd => "x86_64-unknown-freebsd".into(),
     }
 }
 
-fn cargo_target(project: &Path, t: Os, release: bool, on: &dyn Fn(ProgressEvent)) -> BuildTargetResult {
-    let Some(cargo) = which("cargo") else { return ci(t, "Rust toolchain not installed") };
+fn cargo_target(
+    project: &Path,
+    t: Os,
+    release: bool,
+    on: &dyn Fn(ProgressEvent),
+) -> BuildTargetResult {
+    let Some(cargo) = which("cargo") else {
+        return ci(t, "Rust toolchain not installed");
+    };
     let mut c = Command::new(&cargo);
     c.current_dir(project);
     if t == Os::host() {
@@ -442,7 +709,11 @@ fn cargo_target(project: &Path, t: Os, release: bool, on: &dyn Fn(ProgressEvent)
     }
     let mut r = run_all(t, vec![c], on, Some(format!("cross-compiled for {triple}")));
     if r.status == BuildStatus::Success {
-        let dir = project.join("target").join(&triple).join(if release { "release" } else { "debug" });
+        let dir =
+            project
+                .join("target")
+                .join(&triple)
+                .join(if release { "release" } else { "debug" });
         r.artifacts = find_artifacts(&dir, SystemTime::UNIX_EPOCH);
     }
     r
@@ -452,20 +723,49 @@ fn cargo_target(project: &Path, t: Os, release: bool, on: &dyn Fn(ProgressEvent)
 // Artifacts & packaging
 // ---------------------------------------------------------------------------
 
-const SKIP_ARTIFACT_DIRS: &[&str] = &["CMakeFiles", "_deps", ".git", "node_modules", "obj", "deps", ".fingerprint", "incremental", "crossfire-toolchain", "pyinstaller", "AppDir", "stage", "src", "include"];
+const SKIP_ARTIFACT_DIRS: &[&str] = &[
+    "CMakeFiles",
+    "_deps",
+    ".git",
+    "node_modules",
+    "obj",
+    "deps",
+    ".fingerprint",
+    "incremental",
+    "crossfire-toolchain",
+    "pyinstaller",
+    "AppDir",
+    "stage",
+    "src",
+    "include",
+];
 
 fn is_binary(p: &Path) -> bool {
-    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    if matches!(ext.as_str(), "o" | "obj" | "class" | "a" | "lib" | "pdb" | "rlib" | "d" | "rmeta") {
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if matches!(
+        ext.as_str(),
+        "o" | "obj" | "class" | "a" | "lib" | "pdb" | "rlib" | "d" | "rmeta"
+    ) {
         return false;
     }
-    let Ok(mut f) = std::fs::File::open(p) else { return false };
+    let Ok(mut f) = std::fs::File::open(p) else {
+        return false;
+    };
     let mut buf = [0u8; 4];
     use std::io::Read;
     if f.read_exact(&mut buf).is_err() {
         return false;
     }
-    buf[..2] == *b"MZ" || buf == *b"\x7fELF" || matches!(u32::from_be_bytes(buf), 0xfeedface | 0xfeedfacf | 0xcefaedfe | 0xcffaedfe | 0xcafebabe)
+    buf[..2] == *b"MZ"
+        || buf == *b"\x7fELF"
+        || matches!(
+            u32::from_be_bytes(buf),
+            0xfeedface | 0xfeedfacf | 0xcefaedfe | 0xcffaedfe | 0xcafebabe
+        )
 }
 
 /// Binaries / bundles under `dir` modified at or after `since`.
@@ -492,7 +792,12 @@ pub fn find_artifacts(dir: &Path, since: SystemTime) -> Vec<String> {
                     continue;
                 }
                 walk(&p, since, depth + 1, out);
-            } else if fresh && (is_binary(&p) || name.ends_with(".dmg") || name.ends_with(".AppImage") || name.ends_with(".pkg")) {
+            } else if fresh
+                && (is_binary(&p)
+                    || name.ends_with(".dmg")
+                    || name.ends_with(".AppImage")
+                    || name.ends_with(".pkg"))
+            {
                 out.push(p.to_string_lossy().to_string());
             }
         }
@@ -503,10 +808,19 @@ pub fn find_artifacts(dir: &Path, since: SystemTime) -> Vec<String> {
 }
 
 fn archive(files: &[String], out: &Path, zip: bool, on: &dyn Fn(ProgressEvent)) -> bool {
-    let Some(cmake) = which("cmake") else { return false };
-    let Some(parent) = files.first().and_then(|f| Path::new(f).parent().map(Path::to_path_buf)) else { return false };
+    let Some(cmake) = which("cmake") else {
+        return false;
+    };
+    let Some(parent) = files
+        .first()
+        .and_then(|f| Path::new(f).parent().map(Path::to_path_buf))
+    else {
+        return false;
+    };
     let mut c = Command::new(cmake);
-    c.current_dir(&parent).args(["-E", "tar", if zip { "cf" } else { "czf" }]).arg(out);
+    c.current_dir(&parent)
+        .args(["-E", "tar", if zip { "cf" } else { "czf" }])
+        .arg(out);
     if zip {
         c.arg("--format=zip");
     }
@@ -524,7 +838,11 @@ fn project_name(project: &Path) -> String {
         return c[1].to_string();
     }
     if let Ok(v) = read("Cargo.toml").parse::<toml::Table>() {
-        if let Some(n) = v.get("package").and_then(|p| p.get("name")).and_then(|n| n.as_str()) {
+        if let Some(n) = v
+            .get("package")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.as_str())
+        {
             return n.to_string();
         }
     }
@@ -533,7 +851,10 @@ fn project_name(project: &Path) -> String {
             return n.to_string();
         }
     }
-    project.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "app".into())
+    project
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "app".into())
 }
 
 fn package(project: &Path, t: Os, r: &mut BuildTargetResult, on: &dyn Fn(ProgressEvent)) {
@@ -541,15 +862,36 @@ fn package(project: &Path, t: Os, r: &mut BuildTargetResult, on: &dyn Fn(Progres
     let bdir = project.join(format!("build/crossfire-{}", t.id()));
     let _ = std::fs::create_dir_all(&bdir);
     // Only archive artifacts living next to each other (same directory as the first).
-    let first_dir = r.artifacts.first().and_then(|a| Path::new(a).parent().map(Path::to_path_buf));
-    let group: Vec<String> = r.artifacts.iter().filter(|a| Path::new(a).parent().map(Path::to_path_buf) == first_dir).cloned().collect();
+    let first_dir = r
+        .artifacts
+        .first()
+        .and_then(|a| Path::new(a).parent().map(Path::to_path_buf));
+    let group: Vec<String> = r
+        .artifacts
+        .iter()
+        .filter(|a| Path::new(a).parent().map(Path::to_path_buf) == first_dir)
+        .cloned()
+        .collect();
     let mut produced: Vec<String> = Vec::new();
     match t {
         Os::Macos => {
-            if let (Some(app), Some(hdiutil)) = (r.artifacts.iter().find(|a| a.ends_with(".app")).cloned(), which("hdiutil")) {
+            if let (Some(app), Some(hdiutil)) = (
+                r.artifacts.iter().find(|a| a.ends_with(".app")).cloned(),
+                which("hdiutil"),
+            ) {
                 let dmg = bdir.join(format!("{name}.dmg"));
                 let mut c = Command::new(hdiutil);
-                c.args(["create", "-volname", &name, "-srcfolder", &app, "-ov", "-format", "UDZO"]).arg(&dmg);
+                c.args([
+                    "create",
+                    "-volname",
+                    &name,
+                    "-srcfolder",
+                    &app,
+                    "-ov",
+                    "-format",
+                    "UDZO",
+                ])
+                .arg(&dmg);
                 if run_streaming(c, Stage::Build, on, None).success {
                     produced.push(dmg.to_string_lossy().to_string());
                 }
@@ -560,23 +902,46 @@ fn package(project: &Path, t: Os, r: &mut BuildTargetResult, on: &dyn Fn(Progres
                 }
             }
         }
-        Os::Linux if Os::host() == Os::Linux && project.join("packaging/linux/build-appimage.sh").is_file() && which("linuxdeploy").is_some() => {
+        Os::Linux
+            if Os::host() == Os::Linux
+                && project.join("packaging/linux/build-appimage.sh").is_file()
+                && which("linuxdeploy").is_some() =>
+        {
             let mut c = Command::new("bash");
-            c.arg(project.join("packaging/linux/build-appimage.sh")).arg(&bdir).current_dir(project);
+            c.arg(project.join("packaging/linux/build-appimage.sh"))
+                .arg(&bdir)
+                .current_dir(project);
             if run_streaming(c, Stage::Build, on, None).success {
-                produced.extend(find_artifacts(&bdir, SystemTime::UNIX_EPOCH).into_iter().filter(|a| a.ends_with(".AppImage")));
+                produced.extend(
+                    find_artifacts(&bdir, SystemTime::UNIX_EPOCH)
+                        .into_iter()
+                        .filter(|a| a.ends_with(".AppImage")),
+                );
             }
         }
-        Os::Freebsd if Os::host() == Os::Freebsd && project.join("packaging/freebsd/make-pkg.sh").is_file() => {
+        Os::Freebsd
+            if Os::host() == Os::Freebsd
+                && project.join("packaging/freebsd/make-pkg.sh").is_file() =>
+        {
             let mut c = Command::new("sh");
-            c.arg(project.join("packaging/freebsd/make-pkg.sh")).arg(&bdir).current_dir(project);
+            c.arg(project.join("packaging/freebsd/make-pkg.sh"))
+                .arg(&bdir)
+                .current_dir(project);
             if run_streaming(c, Stage::Build, on, None).success {
-                produced.extend(find_artifacts(&bdir, SystemTime::UNIX_EPOCH).into_iter().filter(|a| a.ends_with(".pkg")));
+                produced.extend(
+                    find_artifacts(&bdir, SystemTime::UNIX_EPOCH)
+                        .into_iter()
+                        .filter(|a| a.ends_with(".pkg")),
+                );
             }
         }
         _ => {
             if !group.is_empty() {
-                let (file, zip) = if t == Os::Windows { (format!("{name}-windows-x64.zip"), true) } else { (format!("{name}-{}.tar.gz", t.id()), false) };
+                let (file, zip) = if t == Os::Windows {
+                    (format!("{name}-windows-x64.zip"), true)
+                } else {
+                    (format!("{name}-{}.tar.gz", t.id()), false)
+                };
                 let outp = bdir.join(file);
                 if archive(&group, &outp, zip, on) {
                     produced.push(outp.to_string_lossy().to_string());
@@ -585,7 +950,12 @@ fn package(project: &Path, t: Os, r: &mut BuildTargetResult, on: &dyn Fn(Progres
         }
     }
     if produced.is_empty() {
-        on(ProgressEvent::new(Stage::Build, Level::Warn, -1.0, format!("{}: nothing packaged", t.label())));
+        on(ProgressEvent::new(
+            Stage::Build,
+            Level::Warn,
+            -1.0,
+            format!("{}: nothing packaged", t.label()),
+        ));
     }
     r.artifacts.extend(produced);
 }
@@ -610,7 +980,16 @@ mod tests {
         }
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join("CMakeLists.txt"), "").unwrap();
-        let r = build(&BuildRequest { project: d.path().to_string_lossy().into(), targets: vec![Os::Macos], release: true, package: false }, &|_| {}).unwrap();
+        let r = build(
+            &BuildRequest {
+                project: d.path().to_string_lossy().into(),
+                targets: vec![Os::Macos],
+                release: true,
+                package: false,
+            },
+            &|_| {},
+        )
+        .unwrap();
         assert_eq!(r.results[0].status, BuildStatus::Ci);
     }
 }
