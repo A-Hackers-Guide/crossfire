@@ -60,7 +60,7 @@ The serialized JSON is also the stable contract for the CLI — if you drive the
 
 ## Rules as data
 
-All 674 rules live in TOML, not in code. Adding a rule is a two-line PR plus a fixture. See [Writing a rule](writing-rules.md).
+All 705 rules live in TOML, not in code. Adding a rule is a two-line PR plus a fixture. See [Writing a rule](writing-rules.md).
 
 ## What's not here
 
