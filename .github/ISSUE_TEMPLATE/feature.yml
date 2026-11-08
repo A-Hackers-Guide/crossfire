@@ -1,0 +1,40 @@
+name: Feature request
+description: A non-rule change to Crossfire.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The use case first, the proposed solution second.
+      placeholder: |
+        I'm porting a project that uses X, and today Crossfire …
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would make this better?
+      description: A rough proposal is fine; it doesn't have to be the final design.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Engine (Rust)
+        - UI (React / Tauri)
+        - Templates (CMake / CI / packaging)
+        - AI pass
+        - Docs
+        - other
+    validations:
+      required: true
