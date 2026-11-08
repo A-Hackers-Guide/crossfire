@@ -70,10 +70,25 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
                 (&["DirectInput"], &["dinput8", "dxguid"]),
                 (&["DirectSound"], &["dsound", "dxguid"]),
                 (&["XAudio2"], &["xaudio2"]),
-                (&["mmsystem.h", "timeGetTime", "waveOut", "PlaySound", "midiOut"], &["winmm"]),
-                (&["CoInitialize", "ComPtr", "WASAPI", "Media Foundation"], &["ole32", "oleaut32", "uuid"]),
+                (
+                    &[
+                        "mmsystem.h",
+                        "timeGetTime",
+                        "waveOut",
+                        "PlaySound",
+                        "midiOut",
+                    ],
+                    &["winmm"],
+                ),
+                (
+                    &["CoInitialize", "ComPtr", "WASAPI", "Media Foundation"],
+                    &["ole32", "oleaut32", "uuid"],
+                ),
                 (&["Media Foundation"], &["mfplat", "mfuuid", "mfreadwrite"]),
-                (&["RegOpenKeyEx", "RegQueryValueEx", "RegCloseKey"], &["advapi32"]),
+                (
+                    &["RegOpenKeyEx", "RegQueryValueEx", "RegCloseKey"],
+                    &["advapi32"],
+                ),
                 (&["GetOpenFileName"], &["comdlg32"]),
                 (&["commctrl.h"], &["comctl32"]),
                 (&["dbghelp.h", "SetUnhandledExceptionFilter"], &["dbghelp"]),
@@ -81,7 +96,10 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
                 (&["WGL", "OpenGL"], &["opengl32"]),
                 (&["timeGetTime"], &["winmm"]),
                 (&["Windows HID"], &["hid", "setupapi"]),
-                (&["Direct2D/DirectWrite"], &["d2d1", "dwrite", "windowscodecs"]),
+                (
+                    &["Direct2D/DirectWrite"],
+                    &["d2d1", "dwrite", "windowscodecs"],
+                ),
             ];
             for (keys, libs) in map {
                 if has(keys) {
@@ -93,7 +111,22 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
         }
         Os::Macos => {
             let map: &[(&[&str], &str)] = &[
-                (&["Cocoa/AppKit", "NSApplication", "NSWindow", "NSView", "NSEvent", "NSAlert", "NSMenu", "AppKit controls", "NSImage", "NSWorkspace", "NSPasteboard"], "Cocoa"),
+                (
+                    &[
+                        "Cocoa/AppKit",
+                        "NSApplication",
+                        "NSWindow",
+                        "NSView",
+                        "NSEvent",
+                        "NSAlert",
+                        "NSMenu",
+                        "AppKit controls",
+                        "NSImage",
+                        "NSWorkspace",
+                        "NSPasteboard",
+                    ],
+                    "Cocoa",
+                ),
                 (&["Metal", "MTLCreateSystemDefaultDevice"], "Metal"),
                 (&["MetalKit"], "MetalKit"),
                 (&["QuartzCore", "CAMetalLayer"], "QuartzCore"),
@@ -102,8 +135,21 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
                 (&["AVFoundation"], "AVFoundation"),
                 (&["GameController"], "GameController"),
                 (&["IOKit", "IOKit HID"], "IOKit"),
-                (&["CoreFoundation", "NSBundle", "CFRunLoop", "NSUserDefaults"], "CoreFoundation"),
-                (&["Foundation", "NSString", "NSFileManager", "NSThread", "NSTimer", "NSNotificationCenter"], "Foundation"),
+                (
+                    &["CoreFoundation", "NSBundle", "CFRunLoop", "NSUserDefaults"],
+                    "CoreFoundation",
+                ),
+                (
+                    &[
+                        "Foundation",
+                        "NSString",
+                        "NSFileManager",
+                        "NSThread",
+                        "NSTimer",
+                        "NSNotificationCenter",
+                    ],
+                    "Foundation",
+                ),
                 (&["CVDisplayLink"], "CoreVideo"),
                 (&["Security.framework"], "Security"),
                 (&["CoreGraphics", "ImageIO"], "CoreGraphics"),
@@ -125,19 +171,38 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
             }
         }
         Os::Linux | Os::Freebsd => {
-            let x11 = has(&["Xlib", "XOpenDisplay", "XCreateWindow", "XNextEvent", "XEvent", "Xlib drawing", "XShm/Xrandr/Xinput2", "GLX", "xkbcommon"]);
+            let x11 = has(&[
+                "Xlib",
+                "XOpenDisplay",
+                "XCreateWindow",
+                "XNextEvent",
+                "XEvent",
+                "Xlib drawing",
+                "XShm/Xrandr/Xinput2",
+                "GLX",
+                "xkbcommon",
+            ]);
             if x11 {
                 ls.find.insert("find_package(X11 REQUIRED)".into());
                 lib(&mut ls, "X11::X11");
                 ls.meson.insert("x11".into());
-                ls.packages.insert(if os == Os::Linux { "libx11-dev" } else { "libX11" }.into());
+                ls.packages.insert(
+                    if os == Os::Linux {
+                        "libx11-dev"
+                    } else {
+                        "libX11"
+                    }
+                    .into(),
+                );
             }
             if has(&["XShm/Xrandr/Xinput2"]) {
                 for l in ["X11::Xext", "X11::Xrandr", "X11::Xi"] {
                     lib(&mut ls, l);
                 }
                 ls.packages.extend(if os == Os::Linux {
-                    ["libxext-dev", "libxrandr-dev", "libxi-dev"].map(String::from).to_vec()
+                    ["libxext-dev", "libxrandr-dev", "libxi-dev"]
+                        .map(String::from)
+                        .to_vec()
                 } else {
                     ["libXext", "libXrandr", "libXi"].map(String::from).to_vec()
                 });
@@ -145,26 +210,55 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
             if has(&["xcb"]) {
                 lib(&mut ls, "X11::xcb");
                 ls.find.insert("find_package(X11 REQUIRED)".into());
-                ls.packages.insert(if os == Os::Linux { "libxcb1-dev" } else { "libxcb" }.into());
+                ls.packages.insert(
+                    if os == Os::Linux {
+                        "libxcb1-dev"
+                    } else {
+                        "libxcb"
+                    }
+                    .into(),
+                );
             }
             if has(&["ALSA", "snd_pcm_open", "snd_mixer"]) {
                 ls.find.insert("find_package(ALSA REQUIRED)".into());
                 lib(&mut ls, "ALSA::ALSA");
                 ls.meson.insert("alsa".into());
-                ls.packages.insert(if os == Os::Linux { "libasound2-dev" } else { "alsa-lib" }.into());
+                ls.packages.insert(
+                    if os == Os::Linux {
+                        "libasound2-dev"
+                    } else {
+                        "alsa-lib"
+                    }
+                    .into(),
+                );
             }
             let pkgcfg = |ls: &mut LinkSet, var: &str, module: &str, apt: &str, bsd: &str| {
                 ls.find.insert("find_package(PkgConfig REQUIRED)".into());
-                ls.find.insert(format!("pkg_check_modules({var} REQUIRED IMPORTED_TARGET {module})"));
+                ls.find.insert(format!(
+                    "pkg_check_modules({var} REQUIRED IMPORTED_TARGET {module})"
+                ));
                 ls.libs.insert(format!("PkgConfig::{var}"));
                 ls.meson.insert(module.into());
-                ls.packages.insert(if os == Os::Linux { apt } else { bsd }.into());
+                ls.packages
+                    .insert(if os == Os::Linux { apt } else { bsd }.into());
             };
             if has(&["PulseAudio"]) {
-                pkgcfg(&mut ls, "CF_PULSE", "libpulse-simple", "libpulse-dev", "pulseaudio");
+                pkgcfg(
+                    &mut ls,
+                    "CF_PULSE",
+                    "libpulse-simple",
+                    "libpulse-dev",
+                    "pulseaudio",
+                );
             }
             if has(&["PipeWire"]) {
-                pkgcfg(&mut ls, "CF_PIPEWIRE", "libpipewire-0.3", "libpipewire-0.3-dev", "pipewire");
+                pkgcfg(
+                    &mut ls,
+                    "CF_PIPEWIRE",
+                    "libpipewire-0.3",
+                    "libpipewire-0.3-dev",
+                    "pipewire",
+                );
             }
             if has(&["GTK"]) {
                 pkgcfg(&mut ls, "CF_GTK", "gtk+-3.0", "libgtk-3-dev", "gtk3");
@@ -176,10 +270,22 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
                 pkgcfg(&mut ls, "CF_DBUS", "dbus-1", "libdbus-1-dev", "dbus");
             }
             if has(&["Wayland"]) {
-                pkgcfg(&mut ls, "CF_WAYLAND", "wayland-client", "libwayland-dev", "wayland");
+                pkgcfg(
+                    &mut ls,
+                    "CF_WAYLAND",
+                    "wayland-client",
+                    "libwayland-dev",
+                    "wayland",
+                );
             }
             if has(&["libinput"]) {
-                pkgcfg(&mut ls, "CF_LIBINPUT", "libinput", "libinput-dev", "libinput");
+                pkgcfg(
+                    &mut ls,
+                    "CF_LIBINPUT",
+                    "libinput",
+                    "libinput-dev",
+                    "libinput",
+                );
             }
             if has(&["systemd"]) && os == Os::Linux {
                 pkgcfg(&mut ls, "CF_SYSTEMD", "libsystemd", "libsystemd-dev", "");
@@ -188,7 +294,14 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
                 ls.find.insert("find_package(OpenGL REQUIRED)".into());
                 lib(&mut ls, "OpenGL::GL");
                 ls.meson.insert("gl".into());
-                ls.packages.insert(if os == Os::Linux { "libgl1-mesa-dev" } else { "mesa-libs" }.into());
+                ls.packages.insert(
+                    if os == Os::Linux {
+                        "libgl1-mesa-dev"
+                    } else {
+                        "mesa-libs"
+                    }
+                    .into(),
+                );
             }
             if has(&["EGL"]) {
                 lib(&mut ls, "EGL");
@@ -196,7 +309,14 @@ pub fn link_set(os: Os, apis: &BTreeSet<String>) -> LinkSet {
             if has(&["Vulkan"]) {
                 ls.find.insert("find_package(Vulkan REQUIRED)".into());
                 lib(&mut ls, "Vulkan::Vulkan");
-                ls.packages.insert(if os == Os::Linux { "libvulkan-dev" } else { "vulkan-loader" }.into());
+                ls.packages.insert(
+                    if os == Os::Linux {
+                        "libvulkan-dev"
+                    } else {
+                        "vulkan-loader"
+                    }
+                    .into(),
+                );
             }
             if os == Os::Freebsd && has(&["backtrace()"]) {
                 lib(&mut ls, "execinfo");
@@ -276,7 +396,11 @@ fn cmake_target_setup(p: &NativePlan, tgt: &str, existing: bool, base: &str) -> 
             let cond = cmake_condition(&a.oses);
             if existing {
                 let _ = writeln!(s, "if(NOT ({cond}))");
-                let _ = writeln!(s, "  set_source_files_properties({base}/{} PROPERTIES HEADER_FILE_ONLY ON)", a.path);
+                let _ = writeln!(
+                    s,
+                    "  set_source_files_properties({base}/{} PROPERTIES HEADER_FILE_ONLY ON)",
+                    a.path
+                );
                 if let Some(stub) = &a.stub {
                     let _ = writeln!(s, "  target_sources({tgt} PRIVATE {base}/{stub})");
                 }
@@ -298,14 +422,22 @@ fn cmake_target_setup(p: &NativePlan, tgt: &str, existing: bool, base: &str) -> 
     s.push_str("endif()\n\n");
     let mut first = true;
     for os in [Os::Windows, Os::Macos, Os::Linux, Os::Freebsd] {
-        let ls = p.links.iter().find(|(o, _)| *o == os).map(|(_, l)| l.clone()).unwrap_or_default();
+        let ls = p
+            .links
+            .iter()
+            .find(|(o, _)| *o == os)
+            .map(|(_, l)| l.clone())
+            .unwrap_or_default();
         let kw = if first { "if" } else { "elseif" };
         first = false;
         let _ = writeln!(s, "{kw}({})", cmake_os_var(os));
         match os {
             Os::Windows => {
                 let _ = writeln!(s, "  target_compile_definitions({tgt} PRIVATE _CRT_SECURE_NO_WARNINGS _WINSOCK_DEPRECATED_NO_WARNINGS)");
-                let _ = writeln!(s, "  if(MSVC)\n    target_compile_options({tgt} PRIVATE /utf-8 /W3)\n  endif()");
+                let _ = writeln!(
+                    s,
+                    "  if(MSVC)\n    target_compile_options({tgt} PRIVATE /utf-8 /W3)\n  endif()"
+                );
             }
             Os::Macos => {
                 if !existing && p.gui && p.executable {
@@ -318,7 +450,10 @@ fn cmake_target_setup(p: &NativePlan, tgt: &str, existing: bool, base: &str) -> 
             }
             Os::Freebsd => {
                 let _ = writeln!(s, "  # FreeBSD ports/packages install into /usr/local.");
-                let _ = writeln!(s, "  target_include_directories({tgt} SYSTEM PRIVATE /usr/local/include)");
+                let _ = writeln!(
+                    s,
+                    "  target_include_directories({tgt} SYSTEM PRIVATE /usr/local/include)"
+                );
                 let _ = writeln!(s, "  target_link_directories({tgt} PRIVATE /usr/local/lib)");
             }
             Os::Linux => {}
@@ -328,7 +463,11 @@ fn cmake_target_setup(p: &NativePlan, tgt: &str, existing: bool, base: &str) -> 
         }
         if !ls.libs.is_empty() {
             let libs: Vec<&str> = ls.libs.iter().map(String::as_str).collect();
-            let _ = writeln!(s, "  target_link_libraries({tgt} PRIVATE {})", libs.join(" "));
+            let _ = writeln!(
+                s,
+                "  target_link_libraries({tgt} PRIVATE {})",
+                libs.join(" ")
+            );
         }
     }
     s.push_str("endif()\n");
@@ -339,7 +478,11 @@ fn cmake_target_setup(p: &NativePlan, tgt: &str, existing: bool, base: &str) -> 
 pub fn cmake_lists(p: &NativePlan) -> String {
     let tgt = &p.name;
     let mut s = String::new();
-    let _ = writeln!(s, "# Generated by Crossfire: cross-platform build for {} (Windows, macOS, Linux, FreeBSD).", p.display_name);
+    let _ = writeln!(
+        s,
+        "# Generated by Crossfire: cross-platform build for {} (Windows, macOS, Linux, FreeBSD).",
+        p.display_name
+    );
     s.push_str("cmake_minimum_required(VERSION 3.21)\n\n");
     let arch = match p.macos_arch.as_str() {
         "arm64" => "arm64",
@@ -367,7 +510,11 @@ pub fn cmake_lists(p: &NativePlan) -> String {
     }
     s.push_str("  crossfire/cf_platform.c\n)\n");
     if !p.excluded.is_empty() {
-        let _ = writeln!(s, "# Not compiled (additional entry points): {}", p.excluded.join(", "));
+        let _ = writeln!(
+            s,
+            "# Not compiled (additional entry points): {}",
+            p.excluded.join(", ")
+        );
     }
     if p.executable {
         let mut flags = String::new();
@@ -382,9 +529,23 @@ pub fn cmake_lists(p: &NativePlan) -> String {
         let _ = writeln!(s, "add_library({tgt} ${{CF_SOURCES}})");
     }
     let mut incs = vec!["${CMAKE_CURRENT_SOURCE_DIR}".to_string()];
-    incs.extend(p.include_dirs.iter().filter(|d| !d.is_empty()).map(|d| format!("${{CMAKE_CURRENT_SOURCE_DIR}}/{d}")));
-    let _ = writeln!(s, "target_include_directories({tgt} PRIVATE\n  {}\n)", incs.join("\n  "));
-    s.push_str(&cmake_target_setup(p, tgt, false, "${CMAKE_CURRENT_SOURCE_DIR}"));
+    incs.extend(
+        p.include_dirs
+            .iter()
+            .filter(|d| !d.is_empty())
+            .map(|d| format!("${{CMAKE_CURRENT_SOURCE_DIR}}/{d}")),
+    );
+    let _ = writeln!(
+        s,
+        "target_include_directories({tgt} PRIVATE\n  {}\n)",
+        incs.join("\n  ")
+    );
+    s.push_str(&cmake_target_setup(
+        p,
+        tgt,
+        false,
+        "${CMAKE_CURRENT_SOURCE_DIR}",
+    ));
 
     // Install + CPack packaging.
     let _ = writeln!(
@@ -443,7 +604,9 @@ pub fn crossfire_cmake(p: &NativePlan) -> String {
     s.push_str("if(CMAKE_SYSTEM_NAME STREQUAL \"Linux\")\n  set(CF_LINUX ON)\nelseif(CMAKE_SYSTEM_NAME MATCHES \"FreeBSD|DragonFly\")\n  set(CF_FREEBSD ON)\nendif()\n\n");
     s.push_str(&sdl3_block(p.sdl3_default));
     s.push_str("\nmacro(crossfire_configure tgt)\n");
-    s.push_str("  target_sources(${tgt} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/crossfire/cf_platform.c)\n");
+    s.push_str(
+        "  target_sources(${tgt} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/crossfire/cf_platform.c)\n",
+    );
     s.push_str("  target_include_directories(${tgt} PRIVATE ${CMAKE_CURRENT_LIST_DIR})\n");
     let body = cmake_target_setup(p, "${tgt}", true, "${CMAKE_CURRENT_LIST_DIR}");
     for line in body.lines() {
@@ -463,7 +626,8 @@ pub fn cmake_presets(p: &NativePlan) -> String {
         "x86_64" => "x86_64",
         _ => "arm64;x86_64",
     };
-    let cond = |host: &str| serde_json::json!({"type": "equals", "lhs": "${hostSystemName}", "rhs": host});
+    let cond =
+        |host: &str| serde_json::json!({"type": "equals", "lhs": "${hostSystemName}", "rhs": host});
     let presets = serde_json::json!({
         "version": 6,
         "cmakeMinimumRequired": {"major": 3, "minor": 21, "patch": 0},
@@ -504,9 +668,24 @@ pub fn meson_build(p: &NativePlan) -> String {
         let conds: Vec<String> = a
             .oses
             .iter()
-            .map(|o| format!("sys == '{}'", match o { Os::Windows => "windows", Os::Macos => "darwin", Os::Linux => "linux", Os::Freebsd => "freebsd" }))
+            .map(|o| {
+                format!(
+                    "sys == '{}'",
+                    match o {
+                        Os::Windows => "windows",
+                        Os::Macos => "darwin",
+                        Os::Linux => "linux",
+                        Os::Freebsd => "freebsd",
+                    }
+                )
+            })
             .collect();
-        let _ = writeln!(s, "if {}\n  srcs += files('{}')", conds.join(" or "), a.path);
+        let _ = writeln!(
+            s,
+            "if {}\n  srcs += files('{}')",
+            conds.join(" or "),
+            a.path
+        );
         if let Some(stub) = &a.stub {
             let _ = writeln!(s, "else\n  srcs += files('{stub}')");
         }
@@ -516,7 +695,12 @@ pub fn meson_build(p: &NativePlan) -> String {
         if ls.meson.is_empty() {
             continue;
         }
-        let sysname = match os { Os::Windows => "windows", Os::Macos => "darwin", Os::Linux => "linux", Os::Freebsd => "freebsd" };
+        let sysname = match os {
+            Os::Windows => "windows",
+            Os::Macos => "darwin",
+            Os::Linux => "linux",
+            Os::Freebsd => "freebsd",
+        };
         let _ = writeln!(s, "if sys == '{sysname}'");
         for d in &ls.meson {
             let _ = writeln!(s, "  deps += dependency('{d}')");
@@ -553,8 +737,14 @@ const SDL3_APT: &str = "libx11-dev libxext-dev libxrandr-dev libxcursor-dev libx
 
 pub fn workflow(c: &CiPlan) -> String {
     let mut s = String::new();
-    let _ = writeln!(s, "# Generated by Crossfire: builds {} on every target OS.", c.name);
-    s.push_str("name: Crossfire build\n\non:\n  push:\n  pull_request:\n  workflow_dispatch:\n\njobs:\n");
+    let _ = writeln!(
+        s,
+        "# Generated by Crossfire: builds {} on every target OS.",
+        c.name
+    );
+    s.push_str(
+        "name: Crossfire build\n\non:\n  push:\n  pull_request:\n  workflow_dispatch:\n\njobs:\n",
+    );
     let runners: Vec<(Os, &str)> = c
         .targets
         .iter()
@@ -569,9 +759,15 @@ pub fn workflow(c: &CiPlan) -> String {
     if !runners.is_empty() {
         s.push_str("  build:\n    name: ${{ matrix.target }}\n    strategy:\n      fail-fast: false\n      matrix:\n        include:\n");
         for (os, runner) in &runners {
-            let _ = writeln!(s, "          - target: {}\n            runner: {runner}", os.id());
+            let _ = writeln!(
+                s,
+                "          - target: {}\n            runner: {runner}",
+                os.id()
+            );
         }
-        s.push_str("    runs-on: ${{ matrix.runner }}\n    steps:\n      - uses: actions/checkout@v4\n");
+        s.push_str(
+            "    runs-on: ${{ matrix.runner }}\n    steps:\n      - uses: actions/checkout@v4\n",
+        );
         let mut apt: Vec<String> = c.apt.clone();
         if c.sdl3 {
             apt.extend(SDL3_APT.split(' ').map(String::from));
@@ -592,7 +788,8 @@ pub fn workflow(c: &CiPlan) -> String {
         if c.packages.iter().any(|p| p == "appimage") && matches!(c.kind, BuildKind::CMake) {
             s.push_str("      - name: AppImage\n        if: runner.os == 'Linux'\n        run: bash packaging/linux/build-appimage.sh build/ci\n");
         }
-        if c.packages.iter().any(|p| p == "dmg" || p == "app") && matches!(c.kind, BuildKind::CMake) {
+        if c.packages.iter().any(|p| p == "dmg" || p == "app") && matches!(c.kind, BuildKind::CMake)
+        {
             s.push_str("      - name: macOS bundle\n        if: runner.os == 'macOS'\n        run: bash packaging/macos/make-app.sh build/ci\n");
         }
         let _ = writeln!(s, "      - uses: actions/upload-artifact@v4\n        with:\n          name: {}-${{{{ matrix.target }}}}\n          path: {artifact}\n          if-no-files-found: warn", c.name);

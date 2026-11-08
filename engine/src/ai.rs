@@ -47,8 +47,18 @@ fn answers_summary(a: &Answers) -> String {
 }
 
 pub fn build_prompt(r: &AiRequest) -> String {
-    let targets = r.targets.iter().map(|o| o.label()).collect::<Vec<_>>().join(", ");
-    let source = r.source_os.iter().map(|o| o.label()).collect::<Vec<_>>().join(", ");
+    let targets = r
+        .targets
+        .iter()
+        .map(|o| o.label())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = r
+        .source_os
+        .iter()
+        .map(|o| o.label())
+        .collect::<Vec<_>>()
+        .join(", ");
     let mut issues = String::new();
     for f in r.findings.iter().take(80) {
         let sugg = r
@@ -57,7 +67,10 @@ pub fn build_prompt(r: &AiRequest) -> String {
             .filter_map(|t| f.suggestions.get(t).map(|s| format!("{}: {s}", t.label())))
             .collect::<Vec<_>>()
             .join(" | ");
-        issues.push_str(&format!("- line {} [{:?}] {} — {} Suggestions: {}\n", f.line, f.severity, f.api, f.message, sugg));
+        issues.push_str(&format!(
+            "- line {} [{:?}] {} — {} Suggestions: {}\n",
+            f.line, f.severity, f.api, f.message, sugg
+        ));
     }
     format!(
         "Port this {lang} file from {source} so it works on: {targets}.\n\nChosen options:\n{answers}\n\nPlatform issues found by static analysis:\n{issues}\nFile `{path}`:\n```{fence}\n{content}\n```\n\nRewrite the whole file. Return ONLY the full file in a single fenced code block.",
@@ -121,12 +134,21 @@ pub fn rewrite(ai: &AiSettings, req: &AiRequest) -> Result<String> {
         .context("creating HTTP client")?;
     let reply = match ai.provider {
         AiProvider::Anthropic => {
-            let model = if ai.model.trim().is_empty() { DEFAULT_ANTHROPIC_MODEL } else { ai.model.trim() };
+            let model = if ai.model.trim().is_empty() {
+                DEFAULT_ANTHROPIC_MODEL
+            } else {
+                ai.model.trim()
+            };
             let url = ai
                 .base_url
                 .as_deref()
                 .filter(|u| !u.trim().is_empty())
-                .map(|u| format!("{}/v1/messages", u.trim_end_matches('/').trim_end_matches("/v1")))
+                .map(|u| {
+                    format!(
+                        "{}/v1/messages",
+                        u.trim_end_matches('/').trim_end_matches("/v1")
+                    )
+                })
                 .unwrap_or_else(|| ANTHROPIC_URL.to_string());
             let body = json!({
                 "model": model,
@@ -145,13 +167,22 @@ pub fn rewrite(ai: &AiSettings, req: &AiRequest) -> Result<String> {
             let status = resp.status();
             let v: Value = resp.json().context("decoding Anthropic response")?;
             if !status.is_success() {
-                bail!("Anthropic API {status}: {}", v.pointer("/error/message").and_then(|m| m.as_str()).unwrap_or("unknown error"));
+                bail!(
+                    "Anthropic API {status}: {}",
+                    v.pointer("/error/message")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("unknown error")
+                );
             }
             match v.get("stop_reason").and_then(|s| s.as_str()) {
-                Some("max_tokens") => bail!("response truncated at max_tokens (file too large for one pass)"),
+                Some("max_tokens") => {
+                    bail!("response truncated at max_tokens (file too large for one pass)")
+                }
                 Some("refusal") => bail!(
                     "model declined the request ({})",
-                    v.pointer("/stop_details/category").and_then(|c| c.as_str()).unwrap_or("no category")
+                    v.pointer("/stop_details/category")
+                        .and_then(|c| c.as_str())
+                        .unwrap_or("no category")
                 ),
                 _ => {}
             }
@@ -169,7 +200,11 @@ pub fn rewrite(ai: &AiSettings, req: &AiRequest) -> Result<String> {
                 .ok_or_else(|| anyhow!("no text content in response"))?
         }
         AiProvider::OpenaiCompatible => {
-            let base = ai.base_url.as_deref().filter(|u| !u.trim().is_empty()).unwrap_or("https://api.openai.com/v1");
+            let base = ai
+                .base_url
+                .as_deref()
+                .filter(|u| !u.trim().is_empty())
+                .unwrap_or("https://api.openai.com/v1");
             if ai.model.trim().is_empty() {
                 bail!("no model configured for the OpenAI-compatible provider");
             }
@@ -192,9 +227,17 @@ pub fn rewrite(ai: &AiSettings, req: &AiRequest) -> Result<String> {
             let status = resp.status();
             let v: Value = resp.json().context("decoding chat completions response")?;
             if !status.is_success() {
-                bail!("endpoint returned {status}: {}", v.pointer("/error/message").and_then(|m| m.as_str()).unwrap_or("unknown error"));
+                bail!(
+                    "endpoint returned {status}: {}",
+                    v.pointer("/error/message")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("unknown error")
+                );
             }
-            if v.pointer("/choices/0/finish_reason").and_then(|s| s.as_str()) == Some("length") {
+            if v.pointer("/choices/0/finish_reason")
+                .and_then(|s| s.as_str())
+                == Some("length")
+            {
                 bail!("response truncated (finish_reason=length)");
             }
             v.pointer("/choices/0/message/content")
@@ -204,7 +247,8 @@ pub fn rewrite(ai: &AiSettings, req: &AiRequest) -> Result<String> {
         }
         AiProvider::None => bail!("AI provider is 'none'"),
     };
-    extract_code_block(&reply).ok_or_else(|| anyhow!("model reply did not contain a fenced code block"))
+    extract_code_block(&reply)
+        .ok_or_else(|| anyhow!("model reply did not contain a fenced code block"))
 }
 
 #[cfg(test)]
@@ -214,7 +258,10 @@ mod tests {
     #[test]
     fn extracts_fenced_block() {
         let r = "Here you go:\n```cpp\nint main() {\n  return 0;\n}\n```\nDone.";
-        assert_eq!(extract_code_block(r).unwrap(), "int main() {\n  return 0;\n}\n");
+        assert_eq!(
+            extract_code_block(r).unwrap(),
+            "int main() {\n  return 0;\n}\n"
+        );
         assert!(extract_code_block("no code").is_none());
         // Unterminated fence still yields the body.
         assert_eq!(extract_code_block("```\nx\n").unwrap(), "x\n");
@@ -222,7 +269,11 @@ mod tests {
 
     #[test]
     fn availability_requires_key() {
-        let mut ai = AiSettings { enabled: true, provider: AiProvider::Anthropic, ..Default::default() };
+        let mut ai = AiSettings {
+            enabled: true,
+            provider: AiProvider::Anthropic,
+            ..Default::default()
+        };
         assert!(!available(&ai));
         ai.api_key = "k".into();
         assert!(available(&ai));

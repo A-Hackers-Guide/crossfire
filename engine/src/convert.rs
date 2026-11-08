@@ -20,9 +20,32 @@ use std::time::Instant;
 
 /// Directories not copied into the output (build products, caches, VCS).
 const COPY_SKIP: &[&str] = &[
-    ".git", ".hg", ".svn", "node_modules", "target", "build", "bin", "obj", "DerivedData", ".vs",
-    ".idea", "__pycache__", ".venv", "venv", "Library", "Temp", "Logs", ".godot", "Binaries",
-    "Intermediate", "Saved", "zig-cache", ".zig-cache", "zig-out", ".gradle", ".dart_tool",
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+    "target",
+    "build",
+    "bin",
+    "obj",
+    "DerivedData",
+    ".vs",
+    ".idea",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "Library",
+    "Temp",
+    "Logs",
+    ".godot",
+    "Binaries",
+    "Intermediate",
+    "Saved",
+    "zig-cache",
+    ".zig-cache",
+    "zig-out",
+    ".gradle",
+    ".dart_tool",
 ];
 
 /// Per-file state tracked through the pipeline.
@@ -44,17 +67,27 @@ impl Output<'_> {
     }
 
     /// Write a generated or rewritten file and record the change.
-    fn write(&mut self, rel: &str, content: &str, method: ChangeMethod, confidence: f64, notes: Vec<String>) -> Result<()> {
+    fn write(
+        &mut self,
+        rel: &str,
+        content: &str,
+        method: ChangeMethod,
+        confidence: f64,
+        notes: Vec<String>,
+    ) -> Result<()> {
         let p = self.path(rel);
         if let Some(parent) = p.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let entry = self.changes.entry(rel.to_string()).or_insert_with(|| Tracked {
-            original: None,
-            method,
-            confidence,
-            notes: vec![],
-        });
+        let entry = self
+            .changes
+            .entry(rel.to_string())
+            .or_insert_with(|| Tracked {
+                original: None,
+                method,
+                confidence,
+                notes: vec![],
+            });
         if entry.original.is_none() && p.exists() {
             entry.original = std::fs::read_to_string(&p).ok();
         }
@@ -72,7 +105,8 @@ impl Output<'_> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(self.path(rel), std::fs::Permissions::from_mode(0o755));
+            let _ =
+                std::fs::set_permissions(self.path(rel), std::fs::Permissions::from_mode(0o755));
         }
         #[cfg(not(unix))]
         let _ = rel;
@@ -84,9 +118,23 @@ fn is_unit(id: &str) -> bool {
 }
 
 fn sanitize_name(s: &str) -> String {
-    let mut n: String = s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
+    let mut n: String = s
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
     n = n.trim_matches('_').to_string();
-    if n.is_empty() || n.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+    if n.is_empty()
+        || n.chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
+    {
         n = format!("app_{n}");
     }
     n
@@ -119,7 +167,9 @@ fn copy_tree(src: &Path, out: &Path, exclude: &Path) -> Result<Vec<String>> {
         if !e.file_type().map(|t| t.is_file()).unwrap_or(false) {
             continue;
         }
-        let Ok(rel) = e.path().strip_prefix(src) else { continue };
+        let Ok(rel) = e.path().strip_prefix(src) else {
+            continue;
+        };
         let dst = out.join(rel);
         if let Some(parent) = dst.parent() {
             std::fs::create_dir_all(parent)?;
@@ -152,11 +202,27 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
     // 1. Scan the source --------------------------------------------------------------
     progress(on, 0.0, format!("Scanning {}", source.display()));
     let src_scan = scan_full(&source, &|e| {
-        let p = if e.progress >= 0.0 { e.progress * 0.15 } else { -1.0 };
-        on(ProgressEvent { stage: Stage::Convert, progress: p, ..e });
+        let p = if e.progress >= 0.0 {
+            e.progress * 0.15
+        } else {
+            -1.0
+        };
+        on(ProgressEvent {
+            stage: Stage::Convert,
+            progress: p,
+            ..e
+        });
     })?;
-    let targets: Vec<Os> = if req.targets.is_empty() { Os::ALL.to_vec() } else { req.targets.clone() };
-    let source_os: Vec<Os> = if req.source_os.is_empty() { src_scan.report.detected_os.clone() } else { req.source_os.clone() };
+    let targets: Vec<Os> = if req.targets.is_empty() {
+        Os::ALL.to_vec()
+    } else {
+        req.targets.clone()
+    };
+    let source_os: Vec<Os> = if req.source_os.is_empty() {
+        src_scan.report.detected_os.clone()
+    } else {
+        req.source_os.clone()
+    };
     let answers = effective_answers(&src_scan.report, &targets, &req.answers);
     let strategy = answers.str_or("strategy", "sdl3");
     let idiomatic = answers.str_or("style", "strict") == "idiomatic";
@@ -165,14 +231,27 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
     // 2. Copy ----------------------------------------------------------------------------
     progress(on, 0.15, format!("Copying project to {}", output.display()));
     let copied = copy_tree(&source, &output, &output)?;
-    let mut out = Output { root: &output, changes: BTreeMap::new() };
+    let mut out = Output {
+        root: &output,
+        changes: BTreeMap::new(),
+    };
 
     // 3. Rule-based rewrites ------------------------------------------------------------------
-    let files_lower: HashMap<String, String> = copied.iter().map(|r| (r.to_ascii_lowercase(), r.clone())).collect();
+    let files_lower: HashMap<String, String> = copied
+        .iter()
+        .map(|r| (r.to_ascii_lowercase(), r.clone()))
+        .collect();
     let mut include_dirs: BTreeSet<String> = BTreeSet::new();
     for r in &copied {
-        if matches!(Path::new(r).extension().and_then(|e| e.to_str()), Some("h" | "hpp" | "hh" | "hxx" | "inl")) {
-            include_dirs.insert(r.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default());
+        if matches!(
+            Path::new(r).extension().and_then(|e| e.to_str()),
+            Some("h" | "hpp" | "hh" | "hxx" | "inl")
+        ) {
+            include_dirs.insert(
+                r.rsplit_once('/')
+                    .map(|(d, _)| d.to_string())
+                    .unwrap_or_default(),
+            );
         }
     }
     let include_dirs: Vec<String> = include_dirs.into_iter().filter(|d| !d.is_empty()).collect();
@@ -183,17 +262,22 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
         files_lower: &files_lower,
         include_dirs: &include_dirs,
     };
-    let info_by_rel: HashMap<&str, &FileInfo> = src_scan.files.iter().map(|f| (f.rel.as_str(), f)).collect();
+    let info_by_rel: HashMap<&str, &FileInfo> =
+        src_scan.files.iter().map(|f| (f.rel.as_str(), f)).collect();
     let mut uses = Uses::default();
     let total = copied.len().max(1);
     for (i, rel) in copied.iter().enumerate() {
-        let Some(info) = info_by_rel.get(rel.as_str()) else { continue };
+        let Some(info) = info_by_rel.get(rel.as_str()) else {
+            continue;
+        };
         let Some(l) = info.lang else { continue };
         if !info.text {
             continue;
         }
         let path = out.path(rel);
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
         let res = match l.id {
             id if lang::is_c_family(id) => {
                 uses.c = true;
@@ -217,19 +301,48 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
             }
             out.write(rel, &r.text, ChangeMethod::Rule, 0.95, r.notes)?;
             if (i + 1) % 10 == 0 || i + 1 == total {
-                on(ProgressEvent::new(Stage::Convert, Level::Info, 0.2 + 0.25 * (i + 1) as f64 / total as f64, "Applied rule-based rewrites").with_file(rel.clone()));
+                on(ProgressEvent::new(
+                    Stage::Convert,
+                    Level::Info,
+                    0.2 + 0.25 * (i + 1) as f64 / total as f64,
+                    "Applied rule-based rewrites",
+                )
+                .with_file(rel.clone()));
             }
         }
     }
-    uses.python |= src_scan.files.iter().any(|f| f.lang.map(|l| l.id == "python").unwrap_or(false));
-    uses.csharp |= src_scan.files.iter().any(|f| f.lang.map(|l| l.id == "csharp").unwrap_or(false));
-    uses.c |= src_scan.files.iter().any(|f| f.lang.map(|l| lang::is_c_family(l.id)).unwrap_or(false));
-    progress(on, 0.45, format!("Rule pass changed {} file(s)", out.changes.len()));
+    uses.python |= src_scan
+        .files
+        .iter()
+        .any(|f| f.lang.map(|l| l.id == "python").unwrap_or(false));
+    uses.csharp |= src_scan
+        .files
+        .iter()
+        .any(|f| f.lang.map(|l| l.id == "csharp").unwrap_or(false));
+    uses.c |= src_scan
+        .files
+        .iter()
+        .any(|f| f.lang.map(|l| lang::is_c_family(l.id)).unwrap_or(false));
+    progress(
+        on,
+        0.45,
+        format!("Rule pass changed {} file(s)", out.changes.len()),
+    );
 
     // 4. AI pass for hard files --------------------------------------------------------------------
     let mut ai_notes: Vec<String> = Vec::new();
     if answers.bool_or("useAi", true) && ai::available(&req.ai) {
-        run_ai_pass(&mut out, &src_scan.report, &src_scan.files, &targets, &source_os, &answers, &req.ai, on, &mut ai_notes)?;
+        run_ai_pass(
+            &mut out,
+            &src_scan.report,
+            &src_scan.files,
+            &targets,
+            &source_os,
+            &answers,
+            &req.ai,
+            on,
+            &mut ai_notes,
+        )?;
     } else if answers.bool_or("useAi", false) && !ai::available(&req.ai) {
         ai_notes.push("AI pass requested but no API key/provider is configured; skipped.".into());
     }
@@ -243,16 +356,60 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
     let kind = build_kind(&src_scan.report, &post.files, &answers);
     let mut plan_info = PlanInfo::default();
     if uses.c {
-        out.write("crossfire/cf_platform.h", shim::CF_PLATFORM_H, ChangeMethod::Template, 1.0, vec!["Portability layer: helpers + Win32/POSIX compatibility subset".into()])?;
-        out.write("crossfire/cf_platform.c", shim::CF_PLATFORM_C, ChangeMethod::Template, 1.0, vec!["Implementation of cf_platform.h for Windows, macOS, Linux and FreeBSD".into()])?;
-        plan_info = native_plan(&mut out, &src_scan.report, &post.files, &post.report.findings, &targets, &answers, &strategy)?;
+        out.write(
+            "crossfire/cf_platform.h",
+            shim::CF_PLATFORM_H,
+            ChangeMethod::Template,
+            1.0,
+            vec!["Portability layer: helpers + Win32/POSIX compatibility subset".into()],
+        )?;
+        out.write(
+            "crossfire/cf_platform.c",
+            shim::CF_PLATFORM_C,
+            ChangeMethod::Template,
+            1.0,
+            vec!["Implementation of cf_platform.h for Windows, macOS, Linux and FreeBSD".into()],
+        )?;
+        plan_info = native_plan(
+            &mut out,
+            &src_scan.report,
+            &post.files,
+            &post.report.findings,
+            &targets,
+            &answers,
+            &strategy,
+        )?;
         generate_native_build(&mut out, &plan_info.plan, &answers, &src_scan.report)?;
     }
     if uses.python {
-        out.write("crossfire/__init__.py", shim::CF_INIT_PY, ChangeMethod::Template, 1.0, vec![])?;
-        out.write("crossfire/cf_platform.py", shim::CF_PLATFORM_PY, ChangeMethod::Template, 1.0, vec!["Portable replacements for os.startfile, %APPDATA%, cls, msvcrt.getch".into()])?;
-        out.write("crossfire/cf_winreg.py", shim::CF_WINREG_PY, ChangeMethod::Template, 1.0, vec!["winreg subset backed by JSON outside Windows".into()])?;
-        out.write("crossfire/cf_msvcrt.py", shim::CF_MSVCRT_PY, ChangeMethod::Template, 1.0, vec!["msvcrt subset (getch/kbhit) for POSIX".into()])?;
+        out.write(
+            "crossfire/__init__.py",
+            shim::CF_INIT_PY,
+            ChangeMethod::Template,
+            1.0,
+            vec![],
+        )?;
+        out.write(
+            "crossfire/cf_platform.py",
+            shim::CF_PLATFORM_PY,
+            ChangeMethod::Template,
+            1.0,
+            vec!["Portable replacements for os.startfile, %APPDATA%, cls, msvcrt.getch".into()],
+        )?;
+        out.write(
+            "crossfire/cf_winreg.py",
+            shim::CF_WINREG_PY,
+            ChangeMethod::Template,
+            1.0,
+            vec!["winreg subset backed by JSON outside Windows".into()],
+        )?;
+        out.write(
+            "crossfire/cf_msvcrt.py",
+            shim::CF_MSVCRT_PY,
+            ChangeMethod::Template,
+            1.0,
+            vec!["msvcrt subset (getch/kbhit) for POSIX".into()],
+        )?;
     }
     if uses.csharp {
         let dir = src_scan
@@ -262,7 +419,13 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
             .min_by_key(|f| f.rel.matches('/').count())
             .and_then(|f| f.rel.rsplit_once('/').map(|(d, _)| format!("{d}/")))
             .unwrap_or_default();
-        out.write(&format!("{dir}Crossfire/CfPlatform.cs"), shim::CF_PLATFORM_CS, ChangeMethod::Template, 1.0, vec!["CfPlatform (paths, OpenPath) and CfSettings (registry replacement)".into()])?;
+        out.write(
+            &format!("{dir}Crossfire/CfPlatform.cs"),
+            shim::CF_PLATFORM_CS,
+            ChangeMethod::Template,
+            1.0,
+            vec!["CfPlatform (paths, OpenPath) and CfSettings (registry replacement)".into()],
+        )?;
     }
     let display = src_scan.report.name.clone();
     let name = sanitize_name(&display);
@@ -288,15 +451,35 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
             packages: &packages,
         });
         let p = ".github/workflows/crossfire-build.yml";
-        out.write(p, &wf, ChangeMethod::Template, 1.0, vec!["GitHub Actions: windows/macos/ubuntu runners + FreeBSD via vmactions/freebsd-vm".into()])?;
+        out.write(
+            p,
+            &wf,
+            ChangeMethod::Template,
+            1.0,
+            vec![
+                "GitHub Actions: windows/macos/ubuntu runners + FreeBSD via vmactions/freebsd-vm"
+                    .into(),
+            ],
+        )?;
         ci_path = Some(p.to_string());
     }
-    generate_packaging(&mut out, &name, &display, &answers, &packages, &src_scan.report)?;
+    generate_packaging(
+        &mut out,
+        &name,
+        &display,
+        &answers,
+        &packages,
+        &src_scan.report,
+    )?;
 
     // 7. Changes, diffs, report --------------------------------------------------------------------------
     progress(on, 0.95, "Writing diffs and report");
     let ignore_review = |f: &Finding| {
-        f.file.starts_with("crossfire/") || f.file.starts_with("packaging/") || f.file.starts_with(".github/") || f.file.ends_with(".orig") || f.file.contains("/Crossfire/CfPlatform.cs")
+        f.file.starts_with("crossfire/")
+            || f.file.starts_with("packaging/")
+            || f.file.starts_with(".github/")
+            || f.file.ends_with(".orig")
+            || f.file.contains("/Crossfire/CfPlatform.cs")
     };
     let manual_review: Vec<Finding> = post
         .report
@@ -308,7 +491,11 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
     let mut changes = Vec::new();
     for (rel, t) in &out.changes {
         let new = std::fs::read_to_string(out.path(rel)).unwrap_or_default();
-        let action = if t.original.is_some() || copied.contains(rel) { FileAction::Modified } else { FileAction::Added };
+        let action = if t.original.is_some() || copied.contains(rel) {
+            FileAction::Modified
+        } else {
+            FileAction::Added
+        };
         let old = t.original.clone().unwrap_or_default();
         let diff = if new.len() + old.len() < 400_000 {
             Some(
@@ -321,10 +508,24 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
         } else {
             None
         };
-        changes.push(FileChange { path: rel.clone(), action, method: t.method, confidence: t.confidence, notes: t.notes.clone(), diff });
+        changes.push(FileChange {
+            path: rel.clone(),
+            action,
+            method: t.method,
+            confidence: t.confidence,
+            notes: t.notes.clone(),
+            diff,
+        });
     }
     for rel in copied.iter().filter(|r| !out.changes.contains_key(*r)) {
-        changes.push(FileChange { path: rel.clone(), action: FileAction::Copied, method: ChangeMethod::Copy, confidence: 1.0, notes: vec![], diff: None });
+        changes.push(FileChange {
+            path: rel.clone(),
+            action: FileAction::Copied,
+            method: ChangeMethod::Copy,
+            confidence: 1.0,
+            notes: vec![],
+            diff: None,
+        });
     }
     changes.sort_by(|a, b| {
         let rank = |c: &FileChange| match c.action {
@@ -352,12 +553,28 @@ pub fn convert(req: &ConvertRequest, on: &dyn Fn(ProgressEvent)) -> Result<Conve
     let report_rel = "CROSSFIRE_REPORT.md";
     std::fs::write(out.path(report_rel), &report)?;
     changes.insert(
-        changes.iter().position(|c| c.action != FileAction::Modified).unwrap_or(changes.len()),
-        FileChange { path: report_rel.into(), action: FileAction::Added, method: ChangeMethod::Template, confidence: 1.0, notes: vec!["Conversion summary, manual review list and next steps".into()], diff: None },
+        changes
+            .iter()
+            .position(|c| c.action != FileAction::Modified)
+            .unwrap_or(changes.len()),
+        FileChange {
+            path: report_rel.into(),
+            action: FileAction::Added,
+            method: ChangeMethod::Template,
+            confidence: 1.0,
+            notes: vec!["Conversion summary, manual review list and next steps".into()],
+            diff: None,
+        },
     );
 
-    let modified = changes.iter().filter(|c| c.action == FileAction::Modified).count();
-    let added = changes.iter().filter(|c| c.action == FileAction::Added).count();
+    let modified = changes
+        .iter()
+        .filter(|c| c.action == FileAction::Modified)
+        .count();
+    let added = changes
+        .iter()
+        .filter(|c| c.action == FileAction::Added)
+        .count();
     on(ProgressEvent::new(
         Stage::Convert,
         Level::Success,
@@ -400,7 +617,11 @@ fn run_ai_pass(
     notes: &mut Vec<String>,
 ) -> Result<()> {
     let mut hard: BTreeMap<&str, Vec<Finding>> = BTreeMap::new();
-    for f in report.findings.iter().filter(|f| f.severity >= Severity::High) {
+    for f in report
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::High)
+    {
         hard.entry(f.file.as_str()).or_default().push(f.clone());
     }
     // Skip huge files: they would not round-trip within max_tokens.
@@ -411,7 +632,10 @@ fn run_ai_pass(
             let lang = info.lang?.name.to_string();
             let content = std::fs::read_to_string(out.path(rel)).ok()?;
             if content.len() > 120_000 {
-                notes.push(format!("{rel}: too large for one AI pass ({} KB); left for manual review", content.len() / 1024));
+                notes.push(format!(
+                    "{rel}: too large for one AI pass ({} KB); left for manual review",
+                    content.len() / 1024
+                ));
                 return None;
             }
             Some((rel.to_string(), lang, content, fs))
@@ -421,7 +645,18 @@ fn run_ai_pass(
         return Ok(());
     }
     let n = jobs.len();
-    progress(on, 0.5, format!("AI pass: rewriting {n} file(s) with {}", if settings.model.is_empty() { ai::DEFAULT_ANTHROPIC_MODEL } else { &settings.model }));
+    progress(
+        on,
+        0.5,
+        format!(
+            "AI pass: rewriting {n} file(s) with {}",
+            if settings.model.is_empty() {
+                ai::DEFAULT_ANTHROPIC_MODEL
+            } else {
+                &settings.model
+            }
+        ),
+    );
     // Up to 4 concurrent requests; results flow back over a channel so the
     // progress callback stays on this thread. HTTP runs on plain threads,
     // never inside an async runtime.
@@ -442,7 +677,15 @@ fn run_ai_pass(
                 for (rel, lang, content, fs) in chunk {
                     let r = ai::rewrite(
                         settings,
-                        &ai::AiRequest { path: rel, language: lang, content, findings: fs, targets, source_os, answers },
+                        &ai::AiRequest {
+                            path: rel,
+                            language: lang,
+                            content,
+                            findings: fs,
+                            targets,
+                            source_os,
+                            answers,
+                        },
                     );
                     let _ = tx.send((rel.clone(), r));
                 }
@@ -455,19 +698,45 @@ fn run_ai_pass(
                 Ok(_) => format!("AI rewrote {rel}"),
                 Err(e) => format!("AI failed for {rel}: {e:#} — keeping rule-based version"),
             };
-            on(ProgressEvent::new(Stage::Convert, level, 0.5 + 0.3 * (done + 1) as f64 / n as f64, msg).with_file(rel.clone()));
+            on(ProgressEvent::new(
+                Stage::Convert,
+                level,
+                0.5 + 0.3 * (done + 1) as f64 / n as f64,
+                msg,
+            )
+            .with_file(rel.clone()));
             results.push((rel, r));
         }
     });
     for (rel, r) in results {
         match r {
             Ok(text) => {
-                let original_len = std::fs::read_to_string(out.path(&rel)).map(|s| s.len()).unwrap_or(0);
+                let original_len = std::fs::read_to_string(out.path(&rel))
+                    .map(|s| s.len())
+                    .unwrap_or(0);
                 let mut conf = 0.7;
                 if original_len > 0 && (text.len() as f64) < original_len as f64 * 0.4 {
                     conf = 0.45; // suspiciously short rewrite
                 }
-                out.write(&rel, &text, ChangeMethod::Ai, conf, vec![format!("Rewritten by AI ({}) for {}", if settings.model.is_empty() { ai::DEFAULT_ANTHROPIC_MODEL } else { &settings.model }, targets.iter().map(|o| o.label()).collect::<Vec<_>>().join(", "))])?;
+                out.write(
+                    &rel,
+                    &text,
+                    ChangeMethod::Ai,
+                    conf,
+                    vec![format!(
+                        "Rewritten by AI ({}) for {}",
+                        if settings.model.is_empty() {
+                            ai::DEFAULT_ANTHROPIC_MODEL
+                        } else {
+                            &settings.model
+                        },
+                        targets
+                            .iter()
+                            .map(|o| o.label())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )],
+                )?;
             }
             Err(e) => {
                 let msg = format!("AI pass failed: {e:#}; rule-based version kept");
@@ -523,9 +792,19 @@ fn os_list_label(v: &[Os]) -> String {
 /// The OS set a translation unit is tied to, if any.
 fn affinity(info: &FileInfo, findings: &[&Finding]) -> Option<Vec<Os>> {
     let id = info.lang?.id;
-    let mut set: Option<Vec<Os>> = if matches!(id, "objc" | "objcpp") { Some(vec![Os::Macos]) } else { None };
-    let strong: Vec<&&Finding> = findings.iter().filter(|f| f.severity >= Severity::High && f.os.len() < 4).collect();
-    let blockers = strong.iter().filter(|f| f.severity == Severity::Blocker).count();
+    let mut set: Option<Vec<Os>> = if matches!(id, "objc" | "objcpp") {
+        Some(vec![Os::Macos])
+    } else {
+        None
+    };
+    let strong: Vec<&&Finding> = findings
+        .iter()
+        .filter(|f| f.severity >= Severity::High && f.os.len() < 4)
+        .collect();
+    let blockers = strong
+        .iter()
+        .filter(|f| f.severity == Severity::Blocker)
+        .count();
     if set.is_none() && blockers == 0 && strong.len() < 2 {
         return None;
     }
@@ -557,7 +836,11 @@ fn native_plan(
     }
     let units: Vec<&FileInfo> = files
         .iter()
-        .filter(|f| f.lang.map(|l| is_unit(l.id)).unwrap_or(false) && !f.rel.starts_with("crossfire/") && !f.rel.ends_with(".orig"))
+        .filter(|f| {
+            f.lang.map(|l| is_unit(l.id)).unwrap_or(false)
+                && !f.rel.starts_with("crossfire/")
+                && !f.rel.ends_with(".orig")
+        })
         .collect();
     let translation = strategy == "translation";
     let aff: HashMap<&str, Vec<Os>> = if translation {
@@ -565,17 +848,37 @@ fn native_plan(
     } else {
         units
             .iter()
-            .filter_map(|f| affinity(f, by_file.get(f.rel.as_str()).map(|v| v.as_slice()).unwrap_or(&[])).map(|a| (f.rel.as_str(), a)))
+            .filter_map(|f| {
+                affinity(
+                    f,
+                    by_file
+                        .get(f.rel.as_str())
+                        .map(|v| v.as_slice())
+                        .unwrap_or(&[]),
+                )
+                .map(|a| (f.rel.as_str(), a))
+            })
             .collect()
     };
 
     // Entry points: one portable main wins; otherwise per-OS entries.
     let entries: Vec<&FileInfo> = units.iter().copied().filter(|f| f.has_entry).collect();
     let score = |f: &FileInfo| {
-        let stem = Path::new(&f.rel).file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
-        (f.rel.matches('/').count(), if stem == "main" { 0 } else { 1 }, f.rel.clone())
+        let stem = Path::new(&f.rel)
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        (
+            f.rel.matches('/').count(),
+            if stem == "main" { 0 } else { 1 },
+            f.rel.clone(),
+        )
     };
-    let portable_entries: Vec<&FileInfo> = entries.iter().copied().filter(|f| !aff.contains_key(f.rel.as_str())).collect();
+    let portable_entries: Vec<&FileInfo> = entries
+        .iter()
+        .copied()
+        .filter(|f| !aff.contains_key(f.rel.as_str()))
+        .collect();
     let mut excluded = Vec::new();
     let mut primary: Option<&FileInfo> = None;
     if !portable_entries.is_empty() {
@@ -583,7 +886,12 @@ fn native_plan(
         pe.sort_by_key(|f| score(f));
         primary = Some(pe[0]);
         excluded.extend(pe[1..].iter().map(|f| f.rel.clone()));
-        excluded.extend(entries.iter().filter(|f| aff.contains_key(f.rel.as_str())).map(|f| f.rel.clone()));
+        excluded.extend(
+            entries
+                .iter()
+                .filter(|f| aff.contains_key(f.rel.as_str()))
+                .map(|f| f.rel.clone()),
+        );
     }
 
     let mut plan = NativePlan {
@@ -592,7 +900,10 @@ fn native_plan(
         bundle_id: answers.str_or("bundleId", &format!("com.example.{}", name.to_lowercase())),
         include_dirs: {
             let mut d: BTreeSet<String> = BTreeSet::new();
-            for f in files.iter().filter(|f| f.lang.map(|l| l.id == "h").unwrap_or(false) || f.rel.ends_with(".hpp")) {
+            for f in files
+                .iter()
+                .filter(|f| f.lang.map(|l| l.id == "h").unwrap_or(false) || f.rel.ends_with(".hpp"))
+            {
                 if let Some((dir, _)) = f.rel.rsplit_once('/') {
                     if !dir.starts_with("crossfire") {
                         d.insert(dir.to_string());
@@ -602,11 +913,18 @@ fn native_plan(
             d.into_iter().collect()
         },
         executable: !entries.is_empty(),
-        gui: report.kinds.iter().any(|k| k.flavor == "game" || k.flavor == "app"),
-        has_objc: units.iter().any(|f| matches!(f.lang.map(|l| l.id), Some("objc" | "objcpp"))),
+        gui: report
+            .kinds
+            .iter()
+            .any(|k| k.flavor == "game" || k.flavor == "app"),
+        has_objc: units
+            .iter()
+            .any(|f| matches!(f.lang.map(|l| l.id), Some("objc" | "objcpp"))),
         cxx_standard: answers.str_or("cppStandard", "20"),
         sdl3_default: matches!(strategy, "sdl3" | "hybrid")
-            || ["windowing", "audio", "input"].iter().any(|k| answers.str_or(k, "") == "sdl3"),
+            || ["windowing", "audio", "input"]
+                .iter()
+                .any(|k| answers.str_or(k, "") == "sdl3"),
         macos_arch: answers.str_or("macosArch", "universal"),
         packages: answers.list("packages"),
         excluded: excluded.clone(),
@@ -628,27 +946,48 @@ fn native_plan(
             None => plan.common_sources.push(u.rel.clone()),
             Some(oses) if u.has_entry => {
                 affine_entries.push(u);
-                plan.affine.push(AffineSource { path: u.rel.clone(), oses: oses.clone(), stub: None });
+                plan.affine.push(AffineSource {
+                    path: u.rel.clone(),
+                    oses: oses.clone(),
+                    stub: None,
+                });
             }
             Some(oses) => {
                 let stub_rel = write_stub(out, u, oses, &mut info)?;
-                plan.affine.push(AffineSource { path: u.rel.clone(), oses: oses.clone(), stub: stub_rel });
+                plan.affine.push(AffineSource {
+                    path: u.rel.clone(),
+                    oses: oses.clone(),
+                    stub: stub_rel,
+                });
             }
         }
     }
     // Per-OS entry points only: add a stub main for OSes none of them cover.
     if primary.is_none() && !affine_entries.is_empty() {
-        let covered: BTreeSet<Os> = affine_entries.iter().flat_map(|e| aff[e.rel.as_str()].clone()).collect();
-        let missing: Vec<Os> = Os::ALL.iter().copied().filter(|o| !covered.contains(o)).collect();
+        let covered: BTreeSet<Os> = affine_entries
+            .iter()
+            .flat_map(|e| aff[e.rel.as_str()].clone())
+            .collect();
+        let missing: Vec<Os> = Os::ALL
+            .iter()
+            .copied()
+            .filter(|o| !covered.contains(o))
+            .collect();
         if !missing.is_empty() {
             let e = affine_entries[0];
             let oses = aff[e.rel.as_str()].clone();
             if let Some(stub_rel) = write_stub(out, e, &oses, &mut info)? {
-                plan.affine.push(AffineSource { path: stub_rel, oses: missing, stub: None });
+                plan.affine.push(AffineSource {
+                    path: stub_rel,
+                    oses: missing,
+                    stub: None,
+                });
             }
         }
         // A Windows-only WinMain entry needs the GUI subsystem on Windows.
-        plan.win32_subsystem = affine_entries.iter().any(|e| aff[e.rel.as_str()] == vec![Os::Windows]);
+        plan.win32_subsystem = affine_entries
+            .iter()
+            .any(|e| aff[e.rel.as_str()] == vec![Os::Windows]);
     }
 
     // Link requirements per target OS from the APIs used by sources compiled there.
@@ -660,12 +999,21 @@ fn native_plan(
             .common_sources
             .iter()
             .map(String::as_str)
-            .chain(plan.affine.iter().filter(|a| a.oses.contains(&os)).map(|a| a.path.as_str()))
+            .chain(
+                plan.affine
+                    .iter()
+                    .filter(|a| a.oses.contains(&os))
+                    .map(|a| a.path.as_str()),
+            )
             .collect();
         let mut apis: BTreeSet<String> = BTreeSet::new();
         for f in findings {
-            let header_used = !lang::classify(Path::new(&f.file)).map(|l| is_unit(l.id)).unwrap_or(true);
-            if (compiled.contains(f.file.as_str()) || header_used) && (f.os.contains(&os) || f.os.len() == 4) {
+            let header_used = !lang::classify(Path::new(&f.file))
+                .map(|l| is_unit(l.id))
+                .unwrap_or(true);
+            if (compiled.contains(f.file.as_str()) || header_used)
+                && (f.os.contains(&os) || f.os.len() == 4)
+            {
                 apis.insert(f.api.clone());
             }
         }
@@ -676,7 +1024,12 @@ fn native_plan(
 }
 
 /// Generate the stub for an OS-affine unit; returns its path.
-fn write_stub(out: &mut Output, u: &FileInfo, oses: &[Os], info: &mut PlanInfo) -> Result<Option<String>> {
+fn write_stub(
+    out: &mut Output,
+    u: &FileInfo,
+    oses: &[Os],
+    info: &mut PlanInfo,
+) -> Result<Option<String>> {
     let text = std::fs::read_to_string(out.path(&u.rel)).unwrap_or_default();
     let cpp = matches!(u.lang.map(|l| l.id), Some("cpp" | "objcpp"));
     let dir = u.rel.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
@@ -688,7 +1041,11 @@ fn write_stub(out: &mut Output, u: &FileInfo, oses: &[Os], info: &mut PlanInfo) 
         if inc.contains("cf_platform.h") {
             continue;
         }
-        let joined = if dir.is_empty() { inc.to_string() } else { format!("{dir}/{inc}") };
+        let joined = if dir.is_empty() {
+            inc.to_string()
+        } else {
+            format!("{dir}/{inc}")
+        };
         let normalized = normalize(&joined);
         if out.path(&normalized).is_file() {
             includes.push(normalized);
@@ -705,9 +1062,27 @@ fn write_stub(out: &mut Output, u: &FileInfo, oses: &[Os], info: &mut PlanInfo) 
         Some("cpp" | "objcpp") => "cpp",
         _ => "c",
     };
-    let stub_rel = format!("crossfire/stubs/{}.stub.{ext}", u.rel.replace('/', "_").rsplit_once('.').map(|(a, _)| a).unwrap_or(&u.rel));
-    out.write(&stub_rel, &stub, ChangeMethod::Template, 0.5, vec![format!("Stub for {} on non-{label} targets ({} functions)", u.rel, names.len())])?;
-    info.stubs.push((u.rel.clone(), label, stub_rel.clone(), names));
+    let stub_rel = format!(
+        "crossfire/stubs/{}.stub.{ext}",
+        u.rel
+            .replace('/', "_")
+            .rsplit_once('.')
+            .map(|(a, _)| a)
+            .unwrap_or(&u.rel)
+    );
+    out.write(
+        &stub_rel,
+        &stub,
+        ChangeMethod::Template,
+        0.5,
+        vec![format!(
+            "Stub for {} on non-{label} targets ({} functions)",
+            u.rel,
+            names.len()
+        )],
+    )?;
+    info.stubs
+        .push((u.rel.clone(), label, stub_rel.clone(), names));
     Ok(Some(stub_rel))
 }
 
@@ -725,16 +1100,29 @@ fn normalize(p: &str) -> String {
     v.join("/")
 }
 
-fn generate_native_build(out: &mut Output, plan: &NativePlan, answers: &Answers, report: &ScanReport) -> Result<()> {
+fn generate_native_build(
+    out: &mut Output,
+    plan: &NativePlan,
+    answers: &Answers,
+    report: &ScanReport,
+) -> Result<()> {
     let has_cmake = report.kinds.iter().any(|k| k.name == "CMake");
     let choice = answers.str_or("buildSystem", if has_cmake { "keep" } else { "cmake" });
     let cmake_root_exists = out.path("CMakeLists.txt").is_file();
     match choice.as_str() {
         "keep" if cmake_root_exists => {
-            out.write("crossfire/crossfire.cmake", &templates::crossfire_cmake(plan), ChangeMethod::Template, 0.9, vec!["Per-OS sources/libraries for an existing CMake project".into()])?;
+            out.write(
+                "crossfire/crossfire.cmake",
+                &templates::crossfire_cmake(plan),
+                ChangeMethod::Template,
+                0.9,
+                vec!["Per-OS sources/libraries for an existing CMake project".into()],
+            )?;
             // Hook it into the existing CMakeLists.txt after the first target.
             let txt = std::fs::read_to_string(out.path("CMakeLists.txt")).unwrap_or_default();
-            let re = regex::Regex::new(r"(?m)^\s*add_(executable|library)\s*\(\s*([A-Za-z0-9_\-${}]+)").unwrap();
+            let re =
+                regex::Regex::new(r"(?m)^\s*add_(executable|library)\s*\(\s*([A-Za-z0-9_\-${}]+)")
+                    .unwrap();
             if !txt.contains("crossfire.cmake") {
                 if let Some(c) = re.captures(&txt) {
                     let tgt = c[2].to_string();
@@ -744,17 +1132,33 @@ fn generate_native_build(out: &mut Output, plan: &NativePlan, answers: &Answers,
             }
         }
         "meson" => {
-            out.write("meson.build", &templates::meson_build(plan), ChangeMethod::Template, 0.8, vec!["Generated Meson project with per-OS sources and dependencies".into()])?;
+            out.write(
+                "meson.build",
+                &templates::meson_build(plan),
+                ChangeMethod::Template,
+                0.8,
+                vec!["Generated Meson project with per-OS sources and dependencies".into()],
+            )?;
         }
         "keep" => {
             // No CMake to keep (e.g. MSBuild/Xcode/Make): still provide a
             // CMake build alongside so other OSes can build.
-            write_cmake(out, plan, "Generated CMake build next to the existing build files")?;
+            write_cmake(
+                out,
+                plan,
+                "Generated CMake build next to the existing build files",
+            )?;
         }
         _ => {
             if cmake_root_exists {
                 let orig = std::fs::read_to_string(out.path("CMakeLists.txt")).unwrap_or_default();
-                out.write("CMakeLists.original.txt", &orig, ChangeMethod::Copy, 1.0, vec!["Original CMakeLists.txt kept for reference".into()])?;
+                out.write(
+                    "CMakeLists.original.txt",
+                    &orig,
+                    ChangeMethod::Copy,
+                    1.0,
+                    vec!["Original CMakeLists.txt kept for reference".into()],
+                )?;
             }
             write_cmake(out, plan, "Generated cross-platform CMake project")?;
         }
@@ -765,14 +1169,41 @@ fn generate_native_build(out: &mut Output, plan: &NativePlan, answers: &Answers,
 fn write_cmake(out: &mut Output, plan: &NativePlan, note: &str) -> Result<()> {
     let mut notes = vec![note.to_string()];
     if !plan.affine.is_empty() {
-        notes.push(format!("{} OS-specific source(s) compiled per platform", plan.affine.len()));
+        notes.push(format!(
+            "{} OS-specific source(s) compiled per platform",
+            plan.affine.len()
+        ));
     }
     if plan.sdl3_default {
-        notes.push(format!("SDL3 via find_package or FetchContent ({})", templates::SDL3_TAG));
+        notes.push(format!(
+            "SDL3 via find_package or FetchContent ({})",
+            templates::SDL3_TAG
+        ));
     }
-    out.write("CMakeLists.txt", &templates::cmake_lists(plan), ChangeMethod::Template, 0.85, notes)?;
-    out.write("CMakePresets.json", &templates::cmake_presets(plan), ChangeMethod::Template, 1.0, vec!["Configure/build presets for each OS".into()])?;
-    out.write("packaging/macos/Info.plist.in", &templates::render(templates::INFO_PLIST_IN, &[("CATEGORY", category(plan.gui, true))]), ChangeMethod::Template, 1.0, vec!["Bundle Info.plist template used by CMake (MACOSX_BUNDLE_INFO_PLIST)".into()])?;
+    out.write(
+        "CMakeLists.txt",
+        &templates::cmake_lists(plan),
+        ChangeMethod::Template,
+        0.85,
+        notes,
+    )?;
+    out.write(
+        "CMakePresets.json",
+        &templates::cmake_presets(plan),
+        ChangeMethod::Template,
+        1.0,
+        vec!["Configure/build presets for each OS".into()],
+    )?;
+    out.write(
+        "packaging/macos/Info.plist.in",
+        &templates::render(
+            templates::INFO_PLIST_IN,
+            &[("CATEGORY", category(plan.gui, true))],
+        ),
+        ChangeMethod::Template,
+        1.0,
+        vec!["Bundle Info.plist template used by CMake (MACOSX_BUNDLE_INFO_PLIST)".into()],
+    )?;
     Ok(())
 }
 
@@ -784,9 +1215,19 @@ fn category(gui: bool, game: bool) -> &'static str {
     }
 }
 
-fn generate_packaging(out: &mut Output, name: &str, display: &str, answers: &Answers, packages: &[String], report: &ScanReport) -> Result<()> {
+fn generate_packaging(
+    out: &mut Output,
+    name: &str,
+    display: &str,
+    answers: &Answers,
+    packages: &[String],
+    report: &ScanReport,
+) -> Result<()> {
     let game = report.kinds.iter().any(|k| k.flavor == "game");
-    let gui = report.kinds.iter().any(|k| k.flavor == "game" || k.flavor == "app");
+    let gui = report
+        .kinds
+        .iter()
+        .any(|k| k.flavor == "game" || k.flavor == "app");
     let bundle = answers.str_or("bundleId", &format!("com.example.{}", name.to_lowercase()));
     let vars: Vec<(&str, &str)> = vec![
         ("NAME", name),
@@ -798,27 +1239,81 @@ fn generate_packaging(out: &mut Output, name: &str, display: &str, answers: &Ans
     ];
     let has = |p: &str| packages.iter().any(|x| x == p);
     if has("appimage") || has("tarball") {
-        out.write(&format!("packaging/linux/{name}.desktop"), &templates::render(templates::DESKTOP, &vars), ChangeMethod::Template, 1.0, vec!["Freedesktop launcher".into()])?;
-        out.write(&format!("packaging/linux/{name}.svg"), templates::ICON_SVG, ChangeMethod::Template, 1.0, vec!["Placeholder icon".into()])?;
+        out.write(
+            &format!("packaging/linux/{name}.desktop"),
+            &templates::render(templates::DESKTOP, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["Freedesktop launcher".into()],
+        )?;
+        out.write(
+            &format!("packaging/linux/{name}.svg"),
+            templates::ICON_SVG,
+            ChangeMethod::Template,
+            1.0,
+            vec!["Placeholder icon".into()],
+        )?;
     }
     if has("appimage") {
-        out.write("packaging/linux/build-appimage.sh", &templates::render(templates::APPIMAGE_SH, &vars), ChangeMethod::Template, 1.0, vec!["AppImage via linuxdeploy".into()])?;
+        out.write(
+            "packaging/linux/build-appimage.sh",
+            &templates::render(templates::APPIMAGE_SH, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["AppImage via linuxdeploy".into()],
+        )?;
         out.set_executable("packaging/linux/build-appimage.sh");
     }
     if has("app") || has("dmg") {
-        out.write("packaging/macos/Info.plist", &templates::render(templates::INFO_PLIST, &vars), ChangeMethod::Template, 1.0, vec!["Info.plist for script-built bundles".into()])?;
-        out.write("packaging/macos/make-app.sh", &templates::render(templates::MAKE_APP_SH, &vars), ChangeMethod::Template, 1.0, vec![".app bundle + .dmg (hdiutil), ad-hoc codesign".into()])?;
+        out.write(
+            "packaging/macos/Info.plist",
+            &templates::render(templates::INFO_PLIST, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["Info.plist for script-built bundles".into()],
+        )?;
+        out.write(
+            "packaging/macos/make-app.sh",
+            &templates::render(templates::MAKE_APP_SH, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec![".app bundle + .dmg (hdiutil), ad-hoc codesign".into()],
+        )?;
         out.set_executable("packaging/macos/make-app.sh");
     }
     if has("zip") {
-        out.write("packaging/windows/package-zip.ps1", &templates::render(templates::PACKAGE_ZIP_PS1, &vars), ChangeMethod::Template, 1.0, vec!["Portable zip of the Windows build".into()])?;
+        out.write(
+            "packaging/windows/package-zip.ps1",
+            &templates::render(templates::PACKAGE_ZIP_PS1, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["Portable zip of the Windows build".into()],
+        )?;
     }
     if has("nsis") {
-        out.write("packaging/windows/installer.nsi", &templates::render(templates::INSTALLER_NSI, &vars), ChangeMethod::Template, 1.0, vec!["NSIS installer script".into()])?;
+        out.write(
+            "packaging/windows/installer.nsi",
+            &templates::render(templates::INSTALLER_NSI, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["NSIS installer script".into()],
+        )?;
     }
     if has("freebsd-pkg") {
-        out.write("packaging/freebsd/+MANIFEST", &templates::render(templates::FREEBSD_MANIFEST, &vars), ChangeMethod::Template, 1.0, vec!["pkg-create manifest".into()])?;
-        out.write("packaging/freebsd/make-pkg.sh", &templates::render(templates::FREEBSD_PKG_SH, &vars), ChangeMethod::Template, 1.0, vec!["FreeBSD .pkg via pkg create".into()])?;
+        out.write(
+            "packaging/freebsd/+MANIFEST",
+            &templates::render(templates::FREEBSD_MANIFEST, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["pkg-create manifest".into()],
+        )?;
+        out.write(
+            "packaging/freebsd/make-pkg.sh",
+            &templates::render(templates::FREEBSD_PKG_SH, &vars),
+            ChangeMethod::Template,
+            1.0,
+            vec!["FreeBSD .pkg via pkg create".into()],
+        )?;
         out.set_executable("packaging/freebsd/make-pkg.sh");
     }
     Ok(())
@@ -830,12 +1325,25 @@ pub fn build_kind(report: &ScanReport, files: &[FileInfo], answers: &Answers) ->
     if let Some(e) = ["Unity", "Unreal", "Godot"].iter().find(|e| kind(e)) {
         return BuildKind::Engine(e.to_string());
     }
-    let lead = report.languages.first().map(|l| l.name.as_str()).unwrap_or("");
-    let cfam = files.iter().any(|f| f.lang.map(|l| is_unit(l.id)).unwrap_or(false));
-    if cfam && matches!(lead, "C" | "C++" | "Objective-C" | "Objective-C++" | "C/C++ Header") {
+    let lead = report
+        .languages
+        .first()
+        .map(|l| l.name.as_str())
+        .unwrap_or("");
+    let cfam = files
+        .iter()
+        .any(|f| f.lang.map(|l| is_unit(l.id)).unwrap_or(false));
+    if cfam
+        && matches!(
+            lead,
+            "C" | "C++" | "Objective-C" | "Objective-C++" | "C/C++ Header"
+        )
+    {
         return match answers.str_or("buildSystem", "cmake").as_str() {
             "meson" => BuildKind::Meson,
-            "keep" if !kind("CMake") && kind("Make") && !kind("MSBuild") && !kind("Xcode") => BuildKind::Make,
+            "keep" if !kind("CMake") && kind("Make") && !kind("MSBuild") && !kind("Xcode") => {
+                BuildKind::Make
+            }
             _ => BuildKind::CMake,
         };
     }
@@ -858,9 +1366,27 @@ pub fn build_kind(report: &ScanReport, files: &[FileInfo], answers: &Answers) ->
         return BuildKind::Node;
     }
     if kind("Python") {
-        let mut py: Vec<&FileInfo> = files.iter().filter(|f| f.lang.map(|l| l.id == "python").unwrap_or(false) && !f.rel.starts_with("crossfire/")).collect();
-        py.sort_by_key(|f| (!f.has_entry, f.rel.matches('/').count(), !f.rel.ends_with("main.py"), std::cmp::Reverse(f.lines)));
-        return BuildKind::Python { entry: py.first().map(|f| f.rel.clone()).unwrap_or_else(|| "main.py".into()) };
+        let mut py: Vec<&FileInfo> = files
+            .iter()
+            .filter(|f| {
+                f.lang.map(|l| l.id == "python").unwrap_or(false)
+                    && !f.rel.starts_with("crossfire/")
+            })
+            .collect();
+        py.sort_by_key(|f| {
+            (
+                !f.has_entry,
+                f.rel.matches('/').count(),
+                !f.rel.ends_with("main.py"),
+                std::cmp::Reverse(f.lines),
+            )
+        });
+        return BuildKind::Python {
+            entry: py
+                .first()
+                .map(|f| f.rel.clone())
+                .unwrap_or_else(|| "main.py".into()),
+        };
     }
     if cfam {
         return BuildKind::CMake;
@@ -896,16 +1422,68 @@ fn report_markdown(r: &ReportCtx) -> String {
     let _ = writeln!(s, "# Crossfire conversion report: {}\n", r.src.name);
     let _ = writeln!(s, "## Summary\n");
     let _ = writeln!(s, "| | |\n|---|---|");
-    let _ = writeln!(s, "| Source OS | {} |", if r.source_os.is_empty() { "unknown".into() } else { labels(r.source_os) });
+    let _ = writeln!(
+        s,
+        "| Source OS | {} |",
+        if r.source_os.is_empty() {
+            "unknown".into()
+        } else {
+            labels(r.source_os)
+        }
+    );
     let _ = writeln!(s, "| Targets | {} |", labels(r.targets));
-    let _ = writeln!(s, "| Project kinds | {} |", r.src.kinds.iter().map(|k| format!("{} ({})", k.name, k.flavor)).collect::<Vec<_>>().join(", "));
-    let _ = writeln!(s, "| Languages | {} |", r.src.languages.iter().take(6).map(|l| format!("{} ({} lines)", l.name, l.lines)).collect::<Vec<_>>().join(", "));
-    let _ = writeln!(s, "| Portability | {:.0}% → {:.0}% |", r.src.portability, r.post.portability);
-    let _ = writeln!(s, "| Findings | {} → {} (medium or worse: {}) |", r.src.findings.len(), r.post.findings.len(), r.manual.len());
-    let modified = r.changes.iter().filter(|c| c.action == FileAction::Modified).count();
-    let added = r.changes.iter().filter(|c| c.action == FileAction::Added).count();
-    let copied = r.changes.iter().filter(|c| c.action == FileAction::Copied).count();
-    let _ = writeln!(s, "| Files | {modified} modified, {added} added, {copied} copied unchanged |");
+    let _ = writeln!(
+        s,
+        "| Project kinds | {} |",
+        r.src
+            .kinds
+            .iter()
+            .map(|k| format!("{} ({})", k.name, k.flavor))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let _ = writeln!(
+        s,
+        "| Languages | {} |",
+        r.src
+            .languages
+            .iter()
+            .take(6)
+            .map(|l| format!("{} ({} lines)", l.name, l.lines))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let _ = writeln!(
+        s,
+        "| Portability | {:.0}% → {:.0}% |",
+        r.src.portability, r.post.portability
+    );
+    let _ = writeln!(
+        s,
+        "| Findings | {} → {} (medium or worse: {}) |",
+        r.src.findings.len(),
+        r.post.findings.len(),
+        r.manual.len()
+    );
+    let modified = r
+        .changes
+        .iter()
+        .filter(|c| c.action == FileAction::Modified)
+        .count();
+    let added = r
+        .changes
+        .iter()
+        .filter(|c| c.action == FileAction::Added)
+        .count();
+    let copied = r
+        .changes
+        .iter()
+        .filter(|c| c.action == FileAction::Copied)
+        .count();
+    let _ = writeln!(
+        s,
+        "| Files | {modified} modified, {added} added, {copied} copied unchanged |"
+    );
     let _ = writeln!(s, "| Build | {:?} |\n", r.kind);
 
     let _ = writeln!(s, "### Choices\n");
@@ -918,7 +1496,14 @@ fn report_markdown(r: &ReportCtx) -> String {
 
     let _ = writeln!(s, "## Changes\n");
     for c in r.changes.iter().filter(|c| c.action != FileAction::Copied) {
-        let _ = writeln!(s, "### `{}` — {:?} by {:?} (confidence {:.0}%)\n", c.path, c.action, c.method, c.confidence * 100.0);
+        let _ = writeln!(
+            s,
+            "### `{}` — {:?} by {:?} (confidence {:.0}%)\n",
+            c.path,
+            c.action,
+            c.method,
+            c.confidence * 100.0
+        );
         for n in &c.notes {
             let _ = writeln!(s, "- {n}");
         }
@@ -927,14 +1512,27 @@ fn report_markdown(r: &ReportCtx) -> String {
     if !r.plan.stubs.is_empty() {
         let _ = writeln!(s, "## OS-specific sources and stubs\n");
         let _ = writeln!(s, "These files are tied to one platform. They are compiled only there; elsewhere the generated stub is compiled so the project links. Each stubbed function prints a warning at runtime — implement it with the chosen portable API.\n");
-        let _ = writeln!(s, "| Source | Native on | Stub | Functions |\n|---|---|---|---|");
+        let _ = writeln!(
+            s,
+            "| Source | Native on | Stub | Functions |\n|---|---|---|---|"
+        );
         for (src, label, stub, names) in &r.plan.stubs {
             let _ = writeln!(s, "| `{src}` | {label} | `{stub}` | {} |", names.join(", "));
         }
         s.push('\n');
     }
     if !r.plan.plan.excluded.is_empty() {
-        let _ = writeln!(s, "Additional entry points not compiled into the main target: {}\n", r.plan.plan.excluded.iter().map(|x| format!("`{x}`")).collect::<Vec<_>>().join(", "));
+        let _ = writeln!(
+            s,
+            "Additional entry points not compiled into the main target: {}\n",
+            r.plan
+                .plan
+                .excluded
+                .iter()
+                .map(|x| format!("`{x}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     let _ = writeln!(s, "## Manual review ({} findings)\n", r.manual.len());
@@ -945,8 +1543,26 @@ fn report_markdown(r: &ReportCtx) -> String {
     for (file, fs) in by_file {
         let _ = writeln!(s, "### `{file}`\n");
         for f in fs.iter().take(60) {
-            let sugg = r.targets.iter().filter(|t| !f.os.contains(t)).filter_map(|t| f.suggestions.get(t).map(|x| format!("{}: {x}", t.label()))).next().unwrap_or_default();
-            let _ = writeln!(s, "- L{} **{:?}** `{}` — {} {}", f.line, f.severity, f.api, f.message, if sugg.is_empty() { String::new() } else { format!("→ {sugg}") });
+            let sugg = r
+                .targets
+                .iter()
+                .filter(|t| !f.os.contains(t))
+                .filter_map(|t| f.suggestions.get(t).map(|x| format!("{}: {x}", t.label())))
+                .next()
+                .unwrap_or_default();
+            let _ = writeln!(
+                s,
+                "- L{} **{:?}** `{}` — {} {}",
+                f.line,
+                f.severity,
+                f.api,
+                f.message,
+                if sugg.is_empty() {
+                    String::new()
+                } else {
+                    format!("→ {sugg}")
+                }
+            );
         }
         if fs.len() > 60 {
             let _ = writeln!(s, "- … {} more", fs.len() - 60);
@@ -982,9 +1598,15 @@ fn report_markdown(r: &ReportCtx) -> String {
             let _ = writeln!(s, "1. Build with the project's tooling on each OS.\n");
         }
     }
-    let _ = writeln!(s, "2. Work through the manual review list above, starting with blockers.");
+    let _ = writeln!(
+        s,
+        "2. Work through the manual review list above, starting with blockers."
+    );
     if !r.plan.stubs.is_empty() {
-        let _ = writeln!(s, "3. Replace the generated stubs in `crossfire/stubs/` with real implementations.");
+        let _ = writeln!(
+            s,
+            "3. Replace the generated stubs in `crossfire/stubs/` with real implementations."
+        );
     }
     if let Some(ci) = r.ci {
         let _ = writeln!(s, "4. Push to GitHub: `{ci}` builds every target (FreeBSD in a VM) and uploads artifacts.");

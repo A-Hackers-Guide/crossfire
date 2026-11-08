@@ -35,7 +35,10 @@ fn depth(rel: &str) -> usize {
 }
 
 fn ext(rel: &str) -> String {
-    Path::new(rel).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
+    Path::new(rel)
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default()
 }
 
 struct Ctx<'a> {
@@ -57,7 +60,12 @@ impl Ctx<'_> {
             .map(|f| f.rel.as_str())
     }
     fn find_ext(&self, e: &str) -> Vec<&str> {
-        let mut v: Vec<&str> = self.files.iter().filter(|f| ext(&f.rel) == e).map(|f| f.rel.as_str()).collect();
+        let mut v: Vec<&str> = self
+            .files
+            .iter()
+            .filter(|f| ext(&f.rel) == e)
+            .map(|f| f.rel.as_str())
+            .collect();
         v.sort_by_key(|r| depth(r));
         v
     }
@@ -67,22 +75,36 @@ impl Ctx<'_> {
 }
 
 /// Run all detectors.
-pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks: &[String]) -> Detection {
-    let cx = Ctx { root, files, findings };
+pub fn detect(
+    root: &Path,
+    files: &[FileInfo],
+    findings: &[Finding],
+    frameworks: &[String],
+) -> Detection {
+    let cx = Ctx {
+        root,
+        files,
+        findings,
+    };
     let mut kinds: Vec<ProjectKind> = Vec::new();
     let mut deps: Vec<Dependency> = Vec::new();
     let mut hints: Vec<(Os, f64)> = Vec::new();
     let mut name: Option<String> = None;
     let mut inherent: Vec<(usize, &'static str)> = Vec::new(); // kind index -> fixed flavor
-    let mut add = |kinds: &mut Vec<ProjectKind>, n: &str, evidence: String, fixed: Option<&'static str>| {
-        if kinds.iter().any(|k| k.name == n) {
-            return;
-        }
-        if let Some(f) = fixed {
-            inherent.push((kinds.len(), f));
-        }
-        kinds.push(ProjectKind { name: n.to_string(), flavor: String::new(), evidence });
-    };
+    let mut add =
+        |kinds: &mut Vec<ProjectKind>, n: &str, evidence: String, fixed: Option<&'static str>| {
+            if kinds.iter().any(|k| k.name == n) {
+                return;
+            }
+            if let Some(f) = fixed {
+                inherent.push((kinds.len(), f));
+            }
+            kinds.push(ProjectKind {
+                name: n.to_string(),
+                flavor: String::new(),
+                evidence,
+            });
+        };
 
     // --- build systems -----------------------------------------------------
     if let Some(p) = cx.find_name("CMakeLists.txt") {
@@ -95,7 +117,12 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
             name.get_or_insert(c[1].to_string());
         }
         if txt.contains("find_package(Qt") {
-            add(&mut kinds, "Qt", format!("{p} (find_package(Qt…))"), Some("app"));
+            add(
+                &mut kinds,
+                "Qt",
+                format!("{p} (find_package(Qt…))"),
+                Some("app"),
+            );
         }
         for lib in system_libs_in(&txt) {
             push_dep(&mut deps, &lib, p);
@@ -147,12 +174,18 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
     let slns = cx.find_ext("sln");
     let vcx = cx.find_ext("vcxproj");
     if let Some(p) = slns.first().or(vcx.first()) {
-        add(&mut kinds, "MSBuild", format!("{p}{}", if vcx.is_empty() { "" } else { " (Visual C++)" }), None);
+        add(
+            &mut kinds,
+            "MSBuild",
+            format!("{p}{}", if vcx.is_empty() { "" } else { " (Visual C++)" }),
+            None,
+        );
         hints.push((Os::Windows, 4.0));
     }
     for p in &vcx {
         let t = cx.read(p);
-        for c in re!(r"<AdditionalDependencies>([^<]+)</AdditionalDependencies>").captures_iter(&t) {
+        for c in re!(r"<AdditionalDependencies>([^<]+)</AdditionalDependencies>").captures_iter(&t)
+        {
             for lib in c[1].split(';') {
                 let lib = lib.trim();
                 if lib.ends_with(".lib") {
@@ -169,7 +202,9 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
     for p in &projs {
         let t = cx.read(p);
         let mut notes = Vec::new();
-        let tfm = re!(r"<TargetFrameworks?>([^<]+)<").captures(&t).map(|c| c[1].to_string());
+        let tfm = re!(r"<TargetFrameworks?>([^<]+)<")
+            .captures(&t)
+            .map(|c| c[1].to_string());
         if let Some(tf) = &tfm {
             notes.push(tf.clone());
             if tf.contains("-windows") {
@@ -202,12 +237,26 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         if t.contains("<OutputType>Library") {
             fixed = fixed.or(Some("library"));
         }
-        add(&mut kinds, ".NET", format!("{p} ({})", if notes.is_empty() { "SDK project".into() } else { notes.join(", ") }), fixed);
+        add(
+            &mut kinds,
+            ".NET",
+            format!(
+                "{p} ({})",
+                if notes.is_empty() {
+                    "SDK project".into()
+                } else {
+                    notes.join(", ")
+                }
+            ),
+            fixed,
+        );
         for c in re!(r#"<PackageReference\s+Include="([^"]+)""#).captures_iter(&t) {
             push_dep(&mut deps, &c[1], p);
         }
         if name.is_none() {
-            name = Path::new(p).file_stem().map(|s| s.to_string_lossy().to_string());
+            name = Path::new(p)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string());
         }
     }
     if let Some(p) = cx.find_name("packages.config") {
@@ -218,7 +267,11 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
     }
 
     // --- Apple --------------------------------------------------------------------
-    if let Some(p) = cx.files.iter().find(|f| f.rel.ends_with(".xcodeproj/project.pbxproj")) {
+    if let Some(p) = cx
+        .files
+        .iter()
+        .find(|f| f.rel.ends_with(".xcodeproj/project.pbxproj"))
+    {
         let proj = p.rel.trim_end_matches("/project.pbxproj");
         add(&mut kinds, "Xcode", proj.to_string(), None);
         hints.push((Os::Macos, 4.0));
@@ -230,7 +283,9 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
             }
         }
         if name.is_none() {
-            name = Path::new(proj).file_stem().map(|s| s.to_string_lossy().to_string());
+            name = Path::new(proj)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string());
         }
     }
     if cx.find_name("Info.plist").is_some() {
@@ -238,7 +293,9 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
     }
     if let Some(p) = cx.find_name("Package.swift") {
         let t = cx.read(p);
-        for c in re!(r#"\.package\s*\(\s*(name:\s*"[^"]*",\s*)?url:\s*"[^"]*/([^/"]+?)(\.git)?""#).captures_iter(&t) {
+        for c in re!(r#"\.package\s*\(\s*(name:\s*"[^"]*",\s*)?url:\s*"[^"]*/([^/"]+?)(\.git)?""#)
+            .captures_iter(&t)
+        {
             push_dep(&mut deps, &c[2], p);
         }
     }
@@ -256,7 +313,11 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         let mut ev = p.to_string();
         let mut fixed = None;
         if let Ok(v) = t.parse::<toml::Table>() {
-            if let Some(n) = v.get("package").and_then(|p| p.get("name")).and_then(|n| n.as_str()) {
+            if let Some(n) = v
+                .get("package")
+                .and_then(|p| p.get("name"))
+                .and_then(|n| n.as_str())
+            {
                 name.get_or_insert(n.to_string());
             }
             let mut add_deps = |tbl: Option<&toml::Value>, note: &str| {
@@ -272,19 +333,33 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
                     add_deps(body.get("dependencies"), &format!("only for {cfg}"));
                 }
             }
-            if v.get("lib").is_some() && v.get("bin").is_none() && !cx.files.iter().any(|f| f.rel.ends_with("src/main.rs")) {
+            if v.get("lib").is_some()
+                && v.get("bin").is_none()
+                && !cx.files.iter().any(|f| f.rel.ends_with("src/main.rs"))
+            {
                 fixed = Some("library");
             }
             if v.get("workspace").is_some() {
                 ev.push_str(" (workspace)");
             }
         }
-        if t.contains("bevy") || t.contains("macroquad") || t.contains("ggez") || t.contains("fyrox") {
+        if t.contains("bevy")
+            || t.contains("macroquad")
+            || t.contains("ggez")
+            || t.contains("fyrox")
+        {
             fixed = Some("game");
         }
         add(&mut kinds, "Cargo", ev, fixed);
         if cx.find_name("tauri.conf.json").is_some() {
-            add(&mut kinds, "Tauri", cx.find_name("tauri.conf.json").unwrap_or_default().to_string(), Some("app"));
+            add(
+                &mut kinds,
+                "Tauri",
+                cx.find_name("tauri.conf.json")
+                    .unwrap_or_default()
+                    .to_string(),
+                Some("app"),
+            );
         }
     }
     if let Some(p) = cx.find_name("go.mod") {
@@ -292,20 +367,41 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         if let Some(c) = re!(r"(?m)^module\s+(\S+)").captures(&t) {
             name.get_or_insert(c[1].rsplit('/').next().unwrap_or(&c[1]).to_string());
         }
-        for c in re!(r"(?m)^\s*(?:require\s+)?([a-z0-9.\-]+\.[a-z]+/[^\s]+)\s+v[0-9]").captures_iter(&t) {
+        for c in
+            re!(r"(?m)^\s*(?:require\s+)?([a-z0-9.\-]+\.[a-z]+/[^\s]+)\s+v[0-9]").captures_iter(&t)
+        {
             push_dep(&mut deps, &c[1], p);
         }
     }
 
     // --- Python ------------------------------------------------------------------------
-    let py_manifest = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile"]
-        .iter()
-        .find_map(|n| cx.find_name(n));
+    let py_manifest = [
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+        "Pipfile",
+    ]
+    .iter()
+    .find_map(|n| cx.find_name(n));
     if let Some(p) = py_manifest {
         add(&mut kinds, "Python", p.to_string(), None);
-    } else if cx.files.iter().any(|f| f.lang.map(|l| l.id == "python").unwrap_or(false)) {
-        let first = cx.files.iter().find(|f| f.lang.map(|l| l.id == "python").unwrap_or(false)).unwrap();
-        add(&mut kinds, "Python", format!("{} (scripts, no manifest)", first.rel), None);
+    } else if cx
+        .files
+        .iter()
+        .any(|f| f.lang.map(|l| l.id == "python").unwrap_or(false))
+    {
+        let first = cx
+            .files
+            .iter()
+            .find(|f| f.lang.map(|l| l.id == "python").unwrap_or(false))
+            .unwrap();
+        add(
+            &mut kinds,
+            "Python",
+            format!("{} (scripts, no manifest)", first.rel),
+            None,
+        );
     }
     if let Some(p) = cx.find_name("requirements.txt") {
         for line in cx.read(p).lines() {
@@ -313,23 +409,46 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
             if l.is_empty() || l.starts_with('#') || l.starts_with('-') {
                 continue;
             }
-            let n: String = l.chars().take_while(|c| c.is_alphanumeric() || "-_.".contains(*c)).collect();
-            let note = if l.contains("sys_platform") { "platform-conditional" } else { "" };
+            let n: String = l
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || "-_.".contains(*c))
+                .collect();
+            let note = if l.contains("sys_platform") {
+                "platform-conditional"
+            } else {
+                ""
+            };
             push_dep_note(&mut deps, &n, p, note);
         }
     }
     if let Some(p) = cx.find_name("pyproject.toml") {
         if let Ok(v) = cx.read(p).parse::<toml::Table>() {
-            if let Some(n) = v.get("project").and_then(|p| p.get("name")).and_then(|n| n.as_str()) {
+            if let Some(n) = v
+                .get("project")
+                .and_then(|p| p.get("name"))
+                .and_then(|n| n.as_str())
+            {
                 name.get_or_insert(n.to_string());
             }
-            if let Some(arr) = v.get("project").and_then(|p| p.get("dependencies")).and_then(|d| d.as_array()) {
+            if let Some(arr) = v
+                .get("project")
+                .and_then(|p| p.get("dependencies"))
+                .and_then(|d| d.as_array())
+            {
                 for d in arr.iter().filter_map(|d| d.as_str()) {
-                    let n: String = d.chars().take_while(|c| c.is_alphanumeric() || "-_.".contains(*c)).collect();
+                    let n: String = d
+                        .chars()
+                        .take_while(|c| c.is_alphanumeric() || "-_.".contains(*c))
+                        .collect();
                     push_dep(&mut deps, &n, p);
                 }
             }
-            if let Some(t) = v.get("tool").and_then(|t| t.get("poetry")).and_then(|p| p.get("dependencies")).and_then(|d| d.as_table()) {
+            if let Some(t) = v
+                .get("tool")
+                .and_then(|t| t.get("poetry"))
+                .and_then(|p| p.get("dependencies"))
+                .and_then(|d| d.as_table())
+            {
                 for k in t.keys().filter(|k| *k != "python") {
                     push_dep(&mut deps, k, p);
                 }
@@ -345,7 +464,11 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
                 name.get_or_insert(n.to_string());
             }
             let mut all = Vec::new();
-            for (sec, note) in [("dependencies", ""), ("devDependencies", "dev"), ("optionalDependencies", "optional")] {
+            for (sec, note) in [
+                ("dependencies", ""),
+                ("devDependencies", "dev"),
+                ("optionalDependencies", "optional"),
+            ] {
                 if let Some(o) = v.get(sec).and_then(|d| d.as_object()) {
                     for k in o.keys() {
                         all.push(k.clone());
@@ -354,7 +477,12 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
                 }
             }
             if all.iter().any(|d| d == "electron") {
-                add(&mut kinds, "Electron", format!("{p} (electron dependency)"), Some("app"));
+                add(
+                    &mut kinds,
+                    "Electron",
+                    format!("{p} (electron dependency)"),
+                    Some("app"),
+                );
             } else if all.iter().any(|d| d == "react-native") {
                 add(&mut kinds, "React Native", p.to_string(), Some("app"));
             } else if all.iter().any(|d| d.starts_with("@tauri-apps")) {
@@ -385,7 +513,10 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
     }
     if let Some(p) = cx.find_name("pom.xml") {
         let t = cx.read(p);
-        for c in re!(r"<dependency>\s*<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>").captures_iter(&t) {
+        for c in
+            re!(r"<dependency>\s*<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>")
+                .captures_iter(&t)
+        {
             push_dep(&mut deps, &format!("{}:{}", &c[1], &c[2]), p);
         }
     }
@@ -395,9 +526,16 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cx.read(p)) {
             if let Some(arr) = v.get("dependencies").and_then(|d| d.as_array()) {
                 for d in arr {
-                    let n = d.as_str().map(str::to_string).or_else(|| d.get("name").and_then(|n| n.as_str()).map(str::to_string));
+                    let n = d
+                        .as_str()
+                        .map(str::to_string)
+                        .or_else(|| d.get("name").and_then(|n| n.as_str()).map(str::to_string));
                     if let Some(n) = n {
-                        let note = if d.get("platform").is_some() { "platform-conditional" } else { "" };
+                        let note = if d.get("platform").is_some() {
+                            "platform-conditional"
+                        } else {
+                            ""
+                        };
                         push_dep_note(&mut deps, &n, p, note);
                     }
                 }
@@ -415,7 +553,11 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         }
     }
     // Unity package manifest.
-    if let Some(p) = cx.files.iter().find(|f| f.rel.ends_with("Packages/manifest.json")) {
+    if let Some(p) = cx
+        .files
+        .iter()
+        .find(|f| f.rel.ends_with("Packages/manifest.json"))
+    {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cx.read(&p.rel)) {
             if let Some(o) = v.get("dependencies").and_then(|d| d.as_object()) {
                 for k in o.keys() {
@@ -426,24 +568,58 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
     }
 
     // --- engines -------------------------------------------------------------------------------
-    if let Some(p) = cx.files.iter().find(|f| f.rel.ends_with("ProjectSettings/ProjectVersion.txt") || f.rel.ends_with("ProjectSettings/ProjectSettings.asset")) {
-        let ver = cx.read(&p.rel).lines().find(|l| l.starts_with("m_EditorVersion:")).map(|l| l.trim_start_matches("m_EditorVersion:").trim().to_string());
-        add(&mut kinds, "Unity", format!("{}{}", p.rel, ver.map(|v| format!(" (editor {v})")).unwrap_or_default()), Some("game"));
+    if let Some(p) = cx.files.iter().find(|f| {
+        f.rel.ends_with("ProjectSettings/ProjectVersion.txt")
+            || f.rel.ends_with("ProjectSettings/ProjectSettings.asset")
+    }) {
+        let ver = cx
+            .read(&p.rel)
+            .lines()
+            .find(|l| l.starts_with("m_EditorVersion:"))
+            .map(|l| l.trim_start_matches("m_EditorVersion:").trim().to_string());
+        add(
+            &mut kinds,
+            "Unity",
+            format!(
+                "{}{}",
+                p.rel,
+                ver.map(|v| format!(" (editor {v})")).unwrap_or_default()
+            ),
+            Some("game"),
+        );
     }
     if let Some(p) = cx.find_ext("uproject").first() {
         add(&mut kinds, "Unreal", p.to_string(), Some("game"));
-        name.get_or_insert(Path::new(p).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default());
+        name.get_or_insert(
+            Path::new(p)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default(),
+        );
     }
     if let Some(p) = cx.find_name("project.godot") {
         let t = cx.read(p);
-        let ver = if t.contains("config_version=5") { "Godot 4" } else if t.contains("config_version=4") { "Godot 3" } else { "Godot" };
+        let ver = if t.contains("config_version=5") {
+            "Godot 4"
+        } else if t.contains("config_version=4") {
+            "Godot 3"
+        } else {
+            "Godot"
+        };
         if let Some(c) = re!(r#"config/name="([^"]+)""#).captures(&t) {
             name.get_or_insert(c[1].to_string());
         }
         add(&mut kinds, "Godot", format!("{p} ({ver})"), Some("game"));
     }
-    if cx.find_name("main.lua").is_some() && (cx.find_name("conf.lua").is_some() || cx.has_api(|f| f.api.starts_with("love."))) {
-        add(&mut kinds, "LÖVE (Love2D)", cx.find_name("main.lua").unwrap_or_default().to_string(), Some("game"));
+    if cx.find_name("main.lua").is_some()
+        && (cx.find_name("conf.lua").is_some() || cx.has_api(|f| f.api.starts_with("love.")))
+    {
+        add(
+            &mut kinds,
+            "LÖVE (Love2D)",
+            cx.find_name("main.lua").unwrap_or_default().to_string(),
+            Some("game"),
+        );
     }
     for p in cx.find_ext("pro") {
         let t = cx.read(p);
@@ -493,7 +669,12 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         }
         // Prebuilt binary libraries in the tree.
         if matches!(e.as_str(), "dll" | "lib" | "so" | "dylib" | "a") || n.contains(".so.") {
-            push_dep_note(&mut deps, file_name(&f.rel), &f.rel, "prebuilt binary in tree");
+            push_dep_note(
+                &mut deps,
+                file_name(&f.rel),
+                &f.rel,
+                "prebuilt binary in tree",
+            );
         }
     }
     for fw in frameworks {
@@ -504,16 +685,28 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         LazyLock::new(|| Regex::new(r#"comment\s*\(\s*lib\s*,\s*"([^"]+)""#).unwrap());
     for f in findings.iter().filter(|f| f.api == "#pragma comment(lib)") {
         if let Some(c) = PRAGMA_LIB.captures(&f.snippet) {
-            push_dep_note(&mut deps, c[1].trim_end_matches(".lib"), &format!("{}:{}", f.file, f.line), "#pragma comment(lib)");
+            push_dep_note(
+                &mut deps,
+                c[1].trim_end_matches(".lib"),
+                &format!("{}:{}", f.file, f.line),
+                "#pragma comment(lib)",
+            );
         }
     }
 
     let flavor = overall_flavor(&cx, &kinds);
     for (i, k) in kinds.iter_mut().enumerate() {
-        k.flavor = inherent.iter().find(|(j, _)| *j == i).map(|(_, f)| f.to_string()).unwrap_or_else(|| flavor.clone());
+        k.flavor = inherent
+            .iter()
+            .find(|(j, _)| *j == i)
+            .map(|(_, f)| f.to_string())
+            .unwrap_or_else(|| flavor.clone());
     }
     if kinds.is_empty() && !files.is_empty() {
-        let lead = files.iter().filter(|f| f.lang.map(|l| l.code).unwrap_or(false)).max_by_key(|f| f.lines);
+        let lead = files
+            .iter()
+            .filter(|f| f.lang.map(|l| l.code).unwrap_or(false))
+            .max_by_key(|f| f.lines);
         if let Some(l) = lead {
             kinds.push(ProjectKind {
                 name: format!("{} sources", l.lang.map(|x| x.name).unwrap_or("Plain")),
@@ -523,7 +716,13 @@ pub fn detect(root: &Path, files: &[FileInfo], findings: &[Finding], frameworks:
         }
     }
 
-    Detection { kinds, dependencies: deps, os_hints: hints, name, flavor }
+    Detection {
+        kinds,
+        dependencies: deps,
+        os_hints: hints,
+        name,
+        flavor,
+    }
 }
 
 /// Decide game / app / library / cli / service from findings and kinds.
@@ -532,23 +731,61 @@ fn overall_flavor(cx: &Ctx, kinds: &[ProjectKind]) -> String {
         // Renderers and gamepads mark games; plain keyboard/console input does not.
         f.category == Category::Graphics && f.severity >= crate::model::Severity::Medium
             || [
-                "SDL2", "SDL3", "raylib", "GLFW", "XInput", "XInputGetState", "DirectInput", "XAudio2", "XNA / MonoGame", "sokol", "bgfx",
-                "GameController", "linux/joystick.h", "pygame", "Godot C#", "love.system.getOS",
+                "SDL2",
+                "SDL3",
+                "raylib",
+                "GLFW",
+                "XInput",
+                "XInputGetState",
+                "DirectInput",
+                "XAudio2",
+                "XNA / MonoGame",
+                "sokol",
+                "bgfx",
+                "GameController",
+                "linux/joystick.h",
+                "pygame",
+                "Godot C#",
+                "love.system.getOS",
             ]
             .contains(&f.api.as_str())
     };
-    if kinds.iter().any(|k| ["Unity", "Unreal", "Godot", "LÖVE (Love2D)"].contains(&k.name.as_str())) || cx.has_api(game_api) {
+    if kinds
+        .iter()
+        .any(|k| ["Unity", "Unreal", "Godot", "LÖVE (Love2D)"].contains(&k.name.as_str()))
+        || cx.has_api(game_api)
+    {
         return "game".into();
     }
-    let ui = cx.has_api(|f| matches!(f.category, Category::Ui | Category::Windowing) && f.severity >= crate::model::Severity::Medium);
-    if ui || kinds.iter().any(|k| ["Electron", "Flutter", "Tauri", "Qt", "Qt (qmake)", "Android"].contains(&k.name.as_str())) {
+    let ui = cx.has_api(|f| {
+        matches!(f.category, Category::Ui | Category::Windowing)
+            && f.severity >= crate::model::Severity::Medium
+    });
+    if ui
+        || kinds.iter().any(|k| {
+            [
+                "Electron",
+                "Flutter",
+                "Tauri",
+                "Qt",
+                "Qt (qmake)",
+                "Android",
+            ]
+            .contains(&k.name.as_str())
+        })
+    {
         return "app".into();
     }
     if cx.has_api(|f| ["Windows service", "systemd", "ServiceBase"].contains(&f.api.as_str())) {
         return "service".into();
     }
     let has_entry = cx.files.iter().any(|f| f.has_entry);
-    if !has_entry && cx.files.iter().any(|f| f.lang.map(|l| l.code).unwrap_or(false)) {
+    if !has_entry
+        && cx
+            .files
+            .iter()
+            .any(|f| f.lang.map(|l| l.code).unwrap_or(false))
+    {
         return "library".into();
     }
     if has_entry {
@@ -579,64 +816,177 @@ fn push_dep_note(deps: &mut Vec<Dependency>, name: &str, source: &str, extra: &s
     }
     let (portable, mut note) = classify_dependency(name);
     if !extra.is_empty() {
-        note = if note.is_empty() { extra.to_string() } else { format!("{note} ({extra})") };
+        note = if note.is_empty() {
+            extra.to_string()
+        } else {
+            format!("{note} ({extra})")
+        };
     }
-    deps.push(Dependency { name: name.to_string(), source: source.to_string(), portable, note });
+    deps.push(Dependency {
+        name: name.to_string(),
+        source: source.to_string(),
+        portable,
+        note,
+    });
 }
 
 /// Known dependency portability. Patterns ending in '*' are prefixes.
 const KNOWN: &[(&str, Option<bool>, &str)] = &[
     // Windows system libraries / SDKs
-    ("d3d9", Some(false), "Direct3D 9 — Windows only; SDL_GPU/Vulkan or DXVK/GPTK for translation"),
-    ("d3d11", Some(false), "Direct3D 11 — Windows only; SDL_GPU/Vulkan, or DXVK/GPTK"),
-    ("d3d12", Some(false), "Direct3D 12 — Windows only; Vulkan/Metal via SDL_GPU, or VKD3D-Proton/GPTK"),
+    (
+        "d3d9",
+        Some(false),
+        "Direct3D 9 — Windows only; SDL_GPU/Vulkan or DXVK/GPTK for translation",
+    ),
+    (
+        "d3d11",
+        Some(false),
+        "Direct3D 11 — Windows only; SDL_GPU/Vulkan, or DXVK/GPTK",
+    ),
+    (
+        "d3d12",
+        Some(false),
+        "Direct3D 12 — Windows only; Vulkan/Metal via SDL_GPU, or VKD3D-Proton/GPTK",
+    ),
     ("dxgi", Some(false), "DXGI — Windows only"),
-    ("d3dcompiler*", Some(false), "Runtime HLSL compiler — precompile with DXC + SPIRV-Cross"),
+    (
+        "d3dcompiler*",
+        Some(false),
+        "Runtime HLSL compiler — precompile with DXC + SPIRV-Cross",
+    ),
     ("dxguid", Some(false), "DirectX GUIDs — Windows only"),
     ("xinput*", Some(false), "XInput — use SDL3 gamepad API"),
-    ("dinput8", Some(false), "DirectInput — use SDL3 joystick API"),
+    (
+        "dinput8",
+        Some(false),
+        "DirectInput — use SDL3 joystick API",
+    ),
     ("dsound", Some(false), "DirectSound — use miniaudio/SDL3"),
-    ("xaudio2*", Some(false), "XAudio2 — use miniaudio/SDL3 or FAudio"),
-    ("winmm", Some(false), "Windows multimedia — use miniaudio + std::chrono"),
-    ("user32", Some(false), "Win32 user — SDL3/GLFW for windows & input"),
+    (
+        "xaudio2*",
+        Some(false),
+        "XAudio2 — use miniaudio/SDL3 or FAudio",
+    ),
+    (
+        "winmm",
+        Some(false),
+        "Windows multimedia — use miniaudio + std::chrono",
+    ),
+    (
+        "user32",
+        Some(false),
+        "Win32 user — SDL3/GLFW for windows & input",
+    ),
     ("gdi32", Some(false), "GDI — SDL_Renderer/Skia"),
-    ("kernel32", Some(false), "Win32 kernel — std/POSIX equivalents"),
-    ("ws2_32", Some(false), "WinSock — BSD sockets on other OSes (cf_platform.h maps)"),
+    (
+        "kernel32",
+        Some(false),
+        "Win32 kernel — std/POSIX equivalents",
+    ),
+    (
+        "ws2_32",
+        Some(false),
+        "WinSock — BSD sockets on other OSes (cf_platform.h maps)",
+    ),
     ("ole32", Some(false), "COM — remove or isolate"),
-    ("shell32", Some(false), "Shell API — SDL_OpenURL / std::filesystem"),
-    ("comctl32", Some(false), "Common controls — portable UI toolkit"),
+    (
+        "shell32",
+        Some(false),
+        "Shell API — SDL_OpenURL / std::filesystem",
+    ),
+    (
+        "comctl32",
+        Some(false),
+        "Common controls — portable UI toolkit",
+    ),
     ("advapi32", Some(false), "Registry/security — config files"),
-    ("opengl32", Some(true), "OpenGL (Windows import lib) — link OpenGL::GL in CMake"),
+    (
+        "opengl32",
+        Some(true),
+        "OpenGL (Windows import lib) — link OpenGL::GL in CMake",
+    ),
     // Linux
     ("x11", Some(false), "X11 — Linux/FreeBSD only; SDL3/GLFW"),
     ("xrandr", Some(false), "X11 RandR — SDL3 display API"),
     ("xi", Some(false), "XInput2 (X11) — SDL3"),
     ("asound", Some(false), "ALSA — Linux only; miniaudio/SDL3"),
     ("alsa", Some(false), "ALSA — Linux only; miniaudio/SDL3"),
-    ("pulse*", Some(false), "PulseAudio — Linux/FreeBSD; miniaudio/SDL3"),
-    ("libpulse*", Some(false), "PulseAudio — Linux/FreeBSD; miniaudio/SDL3"),
+    (
+        "pulse*",
+        Some(false),
+        "PulseAudio — Linux/FreeBSD; miniaudio/SDL3",
+    ),
+    (
+        "libpulse*",
+        Some(false),
+        "PulseAudio — Linux/FreeBSD; miniaudio/SDL3",
+    ),
     ("udev", Some(false), "udev — Linux only"),
     ("libudev", Some(false), "udev — Linux only"),
-    ("rt", Some(false), "librt — not on macOS (functions live in libSystem)"),
-    ("gtk*", Some(false), "GTK — available elsewhere but non-native; consider Qt/wxWidgets"),
+    (
+        "rt",
+        Some(false),
+        "librt — not on macOS (functions live in libSystem)",
+    ),
+    (
+        "gtk*",
+        Some(false),
+        "GTK — available elsewhere but non-native; consider Qt/wxWidgets",
+    ),
     ("wayland*", Some(false), "Wayland — Linux/FreeBSD only"),
     ("dbus*", Some(false), "D-Bus — Linux/FreeBSD desktop IPC"),
     // Apple frameworks
     ("cocoa.framework", Some(false), "AppKit — macOS only"),
     ("appkit.framework", Some(false), "AppKit — macOS only"),
-    ("metal.framework", Some(false), "Metal — Apple only; SDL_GPU/Vulkan elsewhere"),
+    (
+        "metal.framework",
+        Some(false),
+        "Metal — Apple only; SDL_GPU/Vulkan elsewhere",
+    ),
     ("metalkit.framework", Some(false), "MetalKit — Apple only"),
-    ("quartzcore.framework", Some(false), "Core Animation — Apple only"),
-    ("audiotoolbox.framework", Some(false), "AudioToolbox — miniaudio/SDL3 elsewhere"),
-    ("coreaudio.framework", Some(false), "CoreAudio — miniaudio/SDL3 elsewhere"),
-    ("avfoundation.framework", Some(false), "AVFoundation — FFmpeg/miniaudio elsewhere"),
+    (
+        "quartzcore.framework",
+        Some(false),
+        "Core Animation — Apple only",
+    ),
+    (
+        "audiotoolbox.framework",
+        Some(false),
+        "AudioToolbox — miniaudio/SDL3 elsewhere",
+    ),
+    (
+        "coreaudio.framework",
+        Some(false),
+        "CoreAudio — miniaudio/SDL3 elsewhere",
+    ),
+    (
+        "avfoundation.framework",
+        Some(false),
+        "AVFoundation — FFmpeg/miniaudio elsewhere",
+    ),
     ("iokit.framework", Some(false), "IOKit — Apple only"),
-    ("gamecontroller.framework", Some(false), "GameController — SDL3 gamepad API"),
-    ("foundation.framework", Some(false), "Foundation — Apple only"),
-    ("corefoundation.framework", Some(false), "CoreFoundation — Apple only"),
+    (
+        "gamecontroller.framework",
+        Some(false),
+        "GameController — SDL3 gamepad API",
+    ),
+    (
+        "foundation.framework",
+        Some(false),
+        "Foundation — Apple only",
+    ),
+    (
+        "corefoundation.framework",
+        Some(false),
+        "CoreFoundation — Apple only",
+    ),
     ("*.framework", Some(false), "Apple framework — macOS only"),
     // Portable C/C++ libraries
-    ("sdl3*", Some(true), "Portable (Windows/macOS/Linux/FreeBSD)"),
+    (
+        "sdl3*",
+        Some(true),
+        "Portable (Windows/macOS/Linux/FreeBSD)",
+    ),
     ("sdl2*", Some(true), "Portable; consider SDL3"),
     ("sdl", Some(true), "Portable"),
     ("glfw*", Some(true), "Portable"),
@@ -645,7 +995,11 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("glm", Some(true), "Header-only, portable"),
     ("glad", Some(true), "Portable GL loader"),
     ("glew", Some(true), "Portable GL loader"),
-    ("opengl", Some(true), "Portable (deprecated on macOS: max 4.1)"),
+    (
+        "opengl",
+        Some(true),
+        "Portable (deprecated on macOS: max 4.1)",
+    ),
     ("vulkan*", Some(true), "Portable (MoltenVK on macOS)"),
     ("volk", Some(true), "Portable Vulkan loader"),
     ("imgui", Some(true), "Portable (pick SDL3/GLFW backends)"),
@@ -653,7 +1007,11 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("miniaudio", Some(true), "Portable"),
     ("openal*", Some(true), "Portable (OpenAL Soft)"),
     ("fmod*", Some(true), "Portable (no FreeBSD binaries)"),
-    ("steamworks*", Some(true), "Windows/macOS/Linux (no FreeBSD)"),
+    (
+        "steamworks*",
+        Some(true),
+        "Windows/macOS/Linux (no FreeBSD)",
+    ),
     ("boost*", Some(true), "Portable"),
     ("fmt", Some(true), "Portable"),
     ("spdlog", Some(true), "Portable"),
@@ -666,9 +1024,17 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("curl", Some(true), "Portable"),
     ("libcurl", Some(true), "Portable"),
     ("threads", Some(true), "CMake Threads — portable"),
-    ("pthread", Some(true), "POSIX threads (MSVC needs std::thread or pthreads4w)"),
+    (
+        "pthread",
+        Some(true),
+        "POSIX threads (MSVC needs std::thread or pthreads4w)",
+    ),
     ("m", Some(true), "libm (implicit on macOS/Windows)"),
-    ("dl", Some(true), "libdl (in libc on macOS/FreeBSD; Windows uses LoadLibrary)"),
+    (
+        "dl",
+        Some(true),
+        "libdl (in libc on macOS/FreeBSD; Windows uses LoadLibrary)",
+    ),
     ("qt*", Some(true), "Portable"),
     ("wxwidgets", Some(true), "Portable"),
     ("freetype", Some(true), "Portable"),
@@ -680,26 +1046,74 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("protobuf", Some(true), "Portable"),
     ("pkgconfig", Some(true), "Build tool"),
     // .NET
-    ("microsoft.windows.compatibility", Some(false), "Windows-only APIs pack"),
-    ("microsoft.windowsappsdk", Some(false), "WinUI 3 — Windows only; Uno/Avalonia"),
-    ("microsoft.web.webview2", Some(false), "WebView2 — Windows only; use Avalonia/Photino webview"),
-    ("sharpdx*", Some(false), "DirectX wrapper — Silk.NET/Veldrid"),
-    ("vortice.*", Some(false), "DirectX wrapper — Silk.NET/Veldrid"),
-    ("naudio*", Some(false), "Windows audio — Silk.NET.OpenAL/ManagedBass"),
+    (
+        "microsoft.windows.compatibility",
+        Some(false),
+        "Windows-only APIs pack",
+    ),
+    (
+        "microsoft.windowsappsdk",
+        Some(false),
+        "WinUI 3 — Windows only; Uno/Avalonia",
+    ),
+    (
+        "microsoft.web.webview2",
+        Some(false),
+        "WebView2 — Windows only; use Avalonia/Photino webview",
+    ),
+    (
+        "sharpdx*",
+        Some(false),
+        "DirectX wrapper — Silk.NET/Veldrid",
+    ),
+    (
+        "vortice.*",
+        Some(false),
+        "DirectX wrapper — Silk.NET/Veldrid",
+    ),
+    (
+        "naudio*",
+        Some(false),
+        "Windows audio — Silk.NET.OpenAL/ManagedBass",
+    ),
     ("system.management", Some(false), "WMI — Windows only"),
-    ("microsoft.win32.registry", Some(false), "Registry — config files"),
-    ("system.drawing.common", Some(false), "Windows-only since .NET 6 — SkiaSharp/ImageSharp"),
+    (
+        "microsoft.win32.registry",
+        Some(false),
+        "Registry — config files",
+    ),
+    (
+        "system.drawing.common",
+        Some(false),
+        "Windows-only since .NET 6 — SkiaSharp/ImageSharp",
+    ),
     ("avalonia*", Some(true), "Portable UI"),
     ("skiasharp*", Some(true), "Portable"),
     ("silk.net*", Some(true), "Portable"),
-    ("monogame.framework.desktopgl", Some(true), "Portable MonoGame backend"),
-    ("monogame.framework.windowsdx", Some(false), "DirectX backend — switch to DesktopGL"),
+    (
+        "monogame.framework.desktopgl",
+        Some(true),
+        "Portable MonoGame backend",
+    ),
+    (
+        "monogame.framework.windowsdx",
+        Some(false),
+        "DirectX backend — switch to DesktopGL",
+    ),
     ("newtonsoft.json", Some(true), "Portable"),
     ("system.text.json", Some(true), "Portable"),
     ("microsoft.extensions.*", Some(true), "Portable"),
-    ("microsoft.maui*", None, "MAUI — Windows/macOS only (no Linux desktop)"),
+    (
+        "microsoft.maui*",
+        None,
+        "MAUI — Windows/macOS only (no Linux desktop)",
+    ),
     // Python
-    ("pywin32", Some(false), "Windows only — psutil/pyperclip/pynput alternatives"),
+    (
+        "pywin32",
+        Some(false),
+        "Windows only — psutil/pyperclip/pynput alternatives",
+    ),
     ("pypiwin32", Some(false), "Windows only"),
     ("wmi", Some(false), "Windows only — psutil"),
     ("comtypes", Some(false), "Windows only"),
@@ -714,11 +1128,27 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("requests", Some(true), "Portable"),
     ("psutil", Some(true), "Portable"),
     ("platformdirs", Some(true), "Portable"),
-    ("pyinstaller", Some(true), "Builds per-OS bundles (run on each OS)"),
+    (
+        "pyinstaller",
+        Some(true),
+        "Builds per-OS bundles (run on each OS)",
+    ),
     // Rust
-    ("winapi", Some(false), "Windows only — gate with cfg(windows)"),
-    ("windows", Some(false), "Windows only — gate with cfg(windows)"),
-    ("windows-sys", Some(false), "Windows only — gate with cfg(windows)"),
+    (
+        "winapi",
+        Some(false),
+        "Windows only — gate with cfg(windows)",
+    ),
+    (
+        "windows",
+        Some(false),
+        "Windows only — gate with cfg(windows)",
+    ),
+    (
+        "windows-sys",
+        Some(false),
+        "Windows only — gate with cfg(windows)",
+    ),
     ("winreg", Some(false), "Windows only — directories/confy"),
     ("cocoa", Some(false), "macOS only"),
     ("objc", Some(false), "macOS only"),
@@ -743,13 +1173,25 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("directories", Some(true), "Portable"),
     ("tauri*", Some(true), "Portable (no FreeBSD bundles)"),
     // Go
-    ("golang.org/x/sys", Some(true), "Portable module (windows/unix subpackages are OS-specific)"),
-    ("github.com/lxn/walk", Some(false), "Windows only — Fyne/Gio/Wails"),
+    (
+        "golang.org/x/sys",
+        Some(true),
+        "Portable module (windows/unix subpackages are OS-specific)",
+    ),
+    (
+        "github.com/lxn/walk",
+        Some(false),
+        "Windows only — Fyne/Gio/Wails",
+    ),
     ("github.com/lxn/win", Some(false), "Windows only"),
     ("fyne.io/fyne*", Some(true), "Portable"),
     ("github.com/hajimehoshi/ebiten*", Some(true), "Portable"),
     // Node
-    ("electron", Some(true), "Portable (no official FreeBSD builds)"),
+    (
+        "electron",
+        Some(true),
+        "Portable (no official FreeBSD builds)",
+    ),
     ("winreg", Some(false), "Windows only"),
     ("regedit", Some(false), "Windows only"),
     ("edge-js", Some(false), "Windows-centric .NET bridge"),
@@ -758,7 +1200,11 @@ const KNOWN: &[(&str, Option<bool>, &str)] = &[
     ("koffi", Some(true), "Portable FFI (load per-OS libraries)"),
     ("node-gyp", None, "Native build — compile per OS"),
     // Unity
-    ("com.unity.*", Some(true), "Unity package (portable across Unity desktop targets)"),
+    (
+        "com.unity.*",
+        Some(true),
+        "Unity package (portable across Unity desktop targets)",
+    ),
 ];
 
 /// Portability of a dependency by name (None = unknown).
@@ -778,13 +1224,22 @@ pub fn classify_dependency(name: &str) -> (Option<bool>, String) {
         }
     }
     if lower.ends_with(".dll") {
-        return (Some(false), "Windows DLL — need .so/.dylib builds for other targets".into());
+        return (
+            Some(false),
+            "Windows DLL — need .so/.dylib builds for other targets".into(),
+        );
     }
     if lower.ends_with(".dylib") {
-        return (Some(false), "macOS dylib — need .dll/.so builds for other targets".into());
+        return (
+            Some(false),
+            "macOS dylib — need .dll/.so builds for other targets".into(),
+        );
     }
     if lower.ends_with(".so") || lower.contains(".so.") {
-        return (Some(false), "ELF shared object — need .dll/.dylib builds for other targets".into());
+        return (
+            Some(false),
+            "ELF shared object — need .dll/.dylib builds for other targets".into(),
+        );
     }
     (None, String::new())
 }
