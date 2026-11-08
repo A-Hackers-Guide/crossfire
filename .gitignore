@@ -6,3 +6,4 @@ apps/electron/dist/
 .DS_Store
 *.log
 .env
+site/
