@@ -1,0 +1,21 @@
+# Default owner for anything not matched below.
+*                                       @A-Hackers-Guide
+
+# Engine
+/engine/                                @A-Hackers-Guide
+/engine/src/rules/                      @A-Hackers-Guide
+
+# UI
+/ui/                                    @A-Hackers-Guide
+/apps/                                  @A-Hackers-Guide
+
+# CI + release + security surfaces
+/.github/workflows/                     @A-Hackers-Guide
+/.github/dependabot.yml                 @A-Hackers-Guide
+/engine/deny.toml                       @A-Hackers-Guide
+/SECURITY.md                            @A-Hackers-Guide
+
+# Docs
+/docs/                                  @A-Hackers-Guide
+/mkdocs.yml                             @A-Hackers-Guide
+/README.md                              @A-Hackers-Guide

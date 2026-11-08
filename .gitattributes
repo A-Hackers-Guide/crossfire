@@ -1,0 +1,33 @@
+* text=auto eol=lf
+
+# Keep Windows-only files with CRLF so they stay native when exported.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries — never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.xz binary
+*.7z binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.webp binary
+
+# GitHub linguist: don't count generated things against language stats.
+ui/package-lock.json linguist-generated=true
+apps/tauri/package-lock.json linguist-generated=true
+apps/electron/package-lock.json linguist-generated=true
+engine/Cargo.lock linguist-generated=true
